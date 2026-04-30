@@ -9,7 +9,7 @@ import {
   type GridCouponRecord,
   type GridDashboardData,
   type GridMemberLedger,
-  type GridOrderSummary
+  type GridOrderSummary,
 } from "@/lib/grid";
 import { getEnv } from "@/server/env";
 import { AppError } from "@/server/errors";
@@ -21,46 +21,68 @@ import {
   searchOrdersByIdentity,
   type WixContact,
   type WixMember,
-  type WixOrder
+  type WixOrder,
 } from "@/server/wix";
+
+// ─── Utility helpers ─────────────────────────────────────────────────────────
 
 function getTodayMonthDay() {
   const now = new Date();
-  return `${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+  return `${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    now.getUTCDate()
+  ).padStart(2, "0")}`;
 }
 
-function extractBirthdayMonthDay(contact: WixContact | null) {
+function extractBirthdayMonthDay(contact: WixContact | null): string | null {
   const birthdate = contact?.info?.birthdate;
+  if (!birthdate) return null;
 
-  if (!birthdate) {
-    return null;
-  }
-
-  const [year, month, day] = birthdate.split("-");
-  if (!year || !month || !day) {
-    return null;
-  }
-
+  // birthdate format from Wix: "YYYY-MM-DD"
+  const parts = birthdate.split("-");
+  if (parts.length < 3) return null;
+  const [, month, day] = parts;
+  if (!month || !day) return null;
   return `${month}-${day}`;
 }
 
-function resolveUsername(member: WixMember, contact: WixContact | null) {
-  const first = member.contact?.firstName ?? contact?.info?.name?.first;
-  const last = member.contact?.lastName ?? contact?.info?.name?.last;
-  const fullName = [first, last].filter(Boolean).join(" ");
+/**
+ * Priority: nickname → full name (member contact fields) →
+ *           full name (CRM contact fields) → loginEmail → fallback
+ */
+function resolveUsername(
+  member: WixMember,
+  contact: WixContact | null
+): string {
+  if (member.profile?.nickname?.trim()) {
+    return member.profile.nickname.trim();
+  }
 
-  return member.profile?.nickname || fullName || member.loginEmail || "UNKNOWN_USER";
+  const memberFirst = member.contact?.firstName?.trim() ?? "";
+  const memberLast = member.contact?.lastName?.trim() ?? "";
+  const memberFullName = [memberFirst, memberLast].filter(Boolean).join(" ");
+  if (memberFullName) return memberFullName;
+
+  const contactFirst = contact?.info?.name?.first?.trim() ?? "";
+  const contactLast = contact?.info?.name?.last?.trim() ?? "";
+  const contactFullName = [contactFirst, contactLast].filter(Boolean).join(" ");
+  if (contactFullName) return contactFullName;
+
+  if (member.loginEmail?.trim()) return member.loginEmail.trim();
+
+  return "GRID_USER";
 }
 
-function isEligibleOrder(order: WixOrder) {
-  const status = order.status?.toUpperCase();
-  const paymentStatus = order.paymentStatus?.toUpperCase();
+function isEligibleOrder(order: WixOrder): boolean {
+  const status = (order.status ?? "").toUpperCase();
+  const paymentStatus = (order.paymentStatus ?? "").toUpperCase();
 
-  if (status === "CANCELED" || status === "INITIALIZED") {
+  // Exclude cancelled / un-started orders.
+  if (["CANCELED", "INITIALIZED", "CHECKOUT_INITIATED", "DECLINED"].includes(status)) {
     return false;
   }
 
-  if (paymentStatus === "NOT_PAID" || paymentStatus === "UNPAID") {
+  // Exclude unpaid orders.
+  if (["NOT_PAID", "UNPAID", "AWAITING_PAYMENT"].includes(paymentStatus)) {
     return false;
   }
 
@@ -68,40 +90,50 @@ function isEligibleOrder(order: WixOrder) {
 }
 
 function toOrderSummary(order: WixOrder): GridOrderSummary {
+  const rawAmount = order.priceSummary?.total?.amount;
+  const total = normaliseAmount(rawAmount);
+
   return {
     id: order.id,
     number: order.number ?? order.id,
-    total: normaliseAmount(order.priceSummary?.total?.amount),
+    total,
     currency: order.priceSummary?.total?.currency ?? "INR",
     purchasedDate: order.purchasedDate ?? null,
     status: order.status ?? "UNKNOWN",
     paymentStatus: order.paymentStatus ?? "UNKNOWN",
     items:
-      order.lineItems?.map((item) => item.productName?.original).filter((name): name is string => Boolean(name)) ??
-      []
+      order.lineItems
+        ?.map((item) => item.productName?.original)
+        .filter((name): name is string => Boolean(name)) ?? [],
   };
 }
 
-function isLedgerStale(ledger: GridMemberLedger) {
+function isLedgerStale(ledger: GridMemberLedger): boolean {
   const env = getEnv();
-  return Date.now() - new Date(ledger.syncedAt).getTime() > env.SYNC_STALE_HOURS * 60 * 60 * 1000;
+  const ageMs = Date.now() - new Date(ledger.syncedAt).getTime();
+  return ageMs > env.SYNC_STALE_HOURS * 60 * 60 * 1000;
 }
 
 function toDashboardData(
   ledger: GridMemberLedger,
   coupons: GridCouponRecord[],
-  leaderboard: Awaited<ReturnType<ReturnType<typeof getRepository>["listTopMembers"]>>
+  leaderboard: Awaited
+    ReturnType<ReturnType<typeof getRepository>["listTopMembers"]>
+  >
 ): GridDashboardData {
   const currentTier = getGridTier(ledger.lifetimeCreds);
   const progress = getGridProgress(ledger.lifetimeCreds);
-  const nextTier = progress.remaining > 0 ? getGridTier(ledger.lifetimeCreds + progress.remaining) : null;
+  const nextTier =
+    progress.remaining > 0
+      ? getGridTier(ledger.lifetimeCreds + progress.remaining)
+      : null;
 
   return {
     member: {
       memberId: ledger.memberId,
       contactId: ledger.contactId,
       username: ledger.username,
-      email: ledger.email
+      email: ledger.email,
     },
     wallet: {
       totalPurchaseValue: ledger.totalPurchaseValue,
@@ -113,7 +145,7 @@ function toDashboardData(
       level: currentTier,
       nextLevel: nextTier,
       progressRatio: progress.ratio,
-      credsToNextLevel: progress.remaining
+      credsToNextLevel: progress.remaining,
     },
     orders: ledger.orders,
     coupons,
@@ -121,45 +153,74 @@ function toDashboardData(
     system: {
       syncWindowLabel: "24-48 hrs",
       syncedAt: ledger.syncedAt,
-      connection: "ONLINE"
-    }
+      connection: "ONLINE",
+    },
   };
 }
 
-export async function syncMemberById(memberId: string) {
+// ─── Core sync logic ─────────────────────────────────────────────────────────
+
+export async function syncMemberById(memberId: string): Promise<GridMemberLedger> {
   const env = getEnv();
   const repo = getRepository();
   const existing = await repo.getMemberLedger(memberId);
 
+  // ── 1. Fetch member & contact from Wix ──────────────────────────────────
   const member = await getMemberById(memberId);
-  const contact = member.contactId ? await getContactById(member.contactId) : null;
+
+  let contact: WixContact | null = null;
+  if (member.contactId) {
+    try {
+      contact = await getContactById(member.contactId);
+    } catch {
+      // Contact is enrichment data — don't block sync if unavailable.
+      console.warn(`[THE_GRID_SYNC] Could not fetch contact ${member.contactId}`);
+    }
+  }
+
+  // ── 2. Derive email ──────────────────────────────────────────────────────
+  const email =
+    member.loginEmail?.trim() ||
+    existing?.email ||
+    contact?.primaryInfo?.email ||
+    "";
+
+  // ── 3. Fetch & aggregate orders ──────────────────────────────────────────
   const rawOrders = await searchOrdersByIdentity({
     memberId,
     contactId: member.contactId,
-    email: member.loginEmail
+    email,
   });
 
   const orders = rawOrders.filter(isEligibleOrder).map(toOrderSummary);
-  const totalPurchaseValue = orders.reduce((sum, order) => sum + order.total, 0);
+  const totalPurchaseValue = orders.reduce((sum, o) => sum + o.total, 0);
   const purchaseCreds = rupeesToCreds(totalPurchaseValue);
 
+  // ── 4. Bonus Creds (idempotent) ──────────────────────────────────────────
   let bonusCreds = existing?.bonusCreds ?? 0;
   let welcomeBonusGrantedAt = existing?.welcomeBonusGrantedAt ?? null;
   let birthdayBonusYears = existing?.birthdayBonusYears ?? [];
 
+  // Welcome bonus — only once ever.
   if (!welcomeBonusGrantedAt) {
     welcomeBonusGrantedAt = new Date().toISOString();
     bonusCreds += env.WELCOME_BONUS_CREDITS;
   }
 
+  // Birthday bonus — once per calendar year.
   const birthdayMonthDay = extractBirthdayMonthDay(contact);
   const currentYear = new Date().getUTCFullYear();
 
-  if (birthdayMonthDay && birthdayMonthDay === getTodayMonthDay() && !birthdayBonusYears.includes(currentYear)) {
+  if (
+    birthdayMonthDay &&
+    birthdayMonthDay === getTodayMonthDay() &&
+    !birthdayBonusYears.includes(currentYear)
+  ) {
     birthdayBonusYears = [...birthdayBonusYears, currentYear];
     bonusCreds += env.BIRTHDAY_BONUS_CREDITS;
   }
 
+  // ── 5. Compute totals ────────────────────────────────────────────────────
   const lifetimeCreds = purchaseCreds + bonusCreds;
   const redeemedCreds = existing?.redeemedCreds ?? 0;
   const availableCreds = Math.max(lifetimeCreds - redeemedCreds, 0);
@@ -168,7 +229,7 @@ export async function syncMemberById(memberId: string) {
   const ledger: GridMemberLedger = {
     memberId,
     contactId: member.contactId ?? null,
-    email: member.loginEmail ?? existing?.email ?? contact?.primaryInfo?.email ?? "",
+    email,
     username: resolveUsername(member, contact),
     birthdayMonthDay,
     welcomeBonusGrantedAt,
@@ -184,14 +245,19 @@ export async function syncMemberById(memberId: string) {
     orders: orders.slice(0, 8),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
-    syncedAt: now
+    syncedAt: now,
   };
 
   await repo.upsertMemberLedger(ledger);
   return ledger;
 }
 
-export async function getDashboardForMember(memberId: string, forceSync = false) {
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+export async function getDashboardForMember(
+  memberId: string,
+  forceSync = false
+): Promise<GridDashboardData> {
   const repo = getRepository();
   let ledger = await repo.getMemberLedger(memberId);
 
@@ -201,13 +267,17 @@ export async function getDashboardForMember(memberId: string, forceSync = false)
 
   const [coupons, leaderboard] = await Promise.all([
     repo.listCouponsByMember(memberId, 6),
-    repo.listTopMembers(5)
+    repo.listTopMembers(5),
   ]);
 
   return toDashboardData(ledger, coupons, leaderboard);
 }
 
-export async function syncAllMembers() {
+export async function syncAllMembers(): Promise<{
+  total: number;
+  synced: number;
+  failed: number;
+}> {
   const members = await queryAllMembers();
   let synced = 0;
   let failed = 0;
@@ -215,27 +285,23 @@ export async function syncAllMembers() {
   for (const member of members) {
     try {
       await syncMemberById(member.id);
-      synced += 1;
+      synced++;
     } catch (error) {
-      failed += 1;
+      failed++;
       console.error("[THE_GRID_SYNC_MEMBER_FAILED]", member.id, error);
     }
   }
 
-  return {
-    total: members.length,
-    synced,
-    failed
-  };
+  return { total: members.length, synced, failed };
 }
 
-export async function assertLedgerExists(memberId: string) {
+export async function assertLedgerExists(memberId: string): Promise<GridMemberLedger> {
   const repo = getRepository();
   const ledger = await repo.getMemberLedger(memberId);
 
   if (!ledger) {
     throw new AppError(
-      `No loyalty ledger exists for this member yet. Run a sync first before calculating ${formatIndianCurrency(0)} rewards.`,
+      `No loyalty ledger found for this member. Trigger a sync first.`,
       404
     );
   }
