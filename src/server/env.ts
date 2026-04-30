@@ -1,5 +1,4 @@
 import "server-only";
-
 import { z } from "zod";
 
 const serverEnvSchema = z.object({
@@ -15,33 +14,20 @@ const serverEnvSchema = z.object({
   WIX_CLIENT_ID: z.string().min(1),
   WIX_API_KEY: z.string().min(1),
   WIX_SITE_ID: z.string().min(1),
-  WIX_MEMBERS_ENDPOINT: z
-    .string()
-    .url()
-    .default("https://www.wixapis.com/members/v1/members"),
-  WIX_MEMBERS_QUERY_ENDPOINT: z
-    .string()
-    .url()
-    .default("https://www.wixapis.com/members/v1/members/query"),
-  WIX_CONTACTS_ENDPOINT: z
-    .string()
-    .url()
-    .default("https://www.wixapis.com/contacts/v4/contacts"),
-  WIX_ORDERS_SEARCH_ENDPOINT: z
-    .string()
-    .url()
-    .default("https://www.wixapis.com/ecom/v1/orders/search"),
-  WIX_COUPONS_ENDPOINT: z
-    .string()
-    .url()
-    .default("https://www.wixapis.com/stores/v2/coupons"),
+  WIX_MEMBERS_ENDPOINT: z.string().url().default("https://www.wixapis.com/members/v1/members"),
+  WIX_MEMBERS_QUERY_ENDPOINT: z.string().url().default("https://www.wixapis.com/members/v1/members/query"),
+  WIX_CONTACTS_ENDPOINT: z.string().url().default("https://www.wixapis.com/contacts/v4/contacts"),
+  WIX_ORDERS_SEARCH_ENDPOINT: z.string().url().default("https://www.wixapis.com/ecom/v1/orders/search"),
+  // Updated to ecom v1 endpoint as per Wix latest API docs
+  // Fallback: https://www.wixapis.com/stores/v2/coupons (stores/v2 uses numeric moneyOffAmount inside specification wrapper)
+  WIX_COUPONS_ENDPOINT: z.string().url().default("https://www.wixapis.com/ecom/v1/coupons"),
   MONGODB_URI: z.string().optional(),
   MONGODB_DB_NAME: z.string().default("the-grid"),
   GRID_CURRENCY: z.string().default("INR"),
   GRID_COUPON_SCOPE_NAMESPACE: z.string().default("stores"),
   SYNC_STALE_HOURS: z.coerce.number().default(24),
   WELCOME_BONUS_CREDITS: z.coerce.number().default(5000),
-  BIRTHDAY_BONUS_CREDITS: z.coerce.number().default(5000)
+  BIRTHDAY_BONUS_CREDITS: z.coerce.number().default(5000),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -49,9 +35,7 @@ export type ServerEnv = z.infer<typeof serverEnvSchema>;
 let cachedEnv: ServerEnv | null = null;
 
 export function getEnv(): ServerEnv {
-  if (cachedEnv) {
-    return cachedEnv;
-  }
+  if (cachedEnv) return cachedEnv;
 
   const parsed = serverEnvSchema.safeParse({
     APP_URL: process.env.APP_URL,
@@ -77,13 +61,13 @@ export function getEnv(): ServerEnv {
     GRID_COUPON_SCOPE_NAMESPACE: process.env.GRID_COUPON_SCOPE_NAMESPACE,
     SYNC_STALE_HOURS: process.env.SYNC_STALE_HOURS,
     WELCOME_BONUS_CREDITS: process.env.WELCOME_BONUS_CREDITS,
-    BIRTHDAY_BONUS_CREDITS: process.env.BIRTHDAY_BONUS_CREDITS
+    BIRTHDAY_BONUS_CREDITS: process.env.BIRTHDAY_BONUS_CREDITS,
   });
 
   if (!parsed.success) {
     throw new Error(
       `Invalid server environment:\n${parsed.error.issues
-        .map((issue) => `- ${issue.path.join(".")}: ${issue.message}`)
+        .map((i) => `- ${i.path.join(".")}: ${i.message}`)
         .join("\n")}`
     );
   }
