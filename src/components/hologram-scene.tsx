@@ -5,259 +5,232 @@ import * as THREE from "three";
 
 type SceneMode = "full" | "lite";
 
-function setMaterialOpacity(object: THREE.Object3D, opacity: number) {
-  object.traverse((child) => {
-    if (!("material" in child) || !child.material) {
-      return;
-    }
-
-    const material = child.material;
-
-    if (Array.isArray(material)) {
-      material.forEach((item) => {
-        const resolved = item as THREE.Material;
-        resolved.transparent = true;
-        resolved.opacity = opacity;
-      });
-      return;
-    }
-
-    const resolved = material as THREE.Material;
-    resolved.transparent = true;
-    resolved.opacity = opacity;
+function setMaterialOpacity(obj: THREE.Object3D, opacity: number) {
+  obj.traverse((child) => {
+    if (!("material" in child) || !child.material) return;
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    mats.forEach((m) => { (m as THREE.Material).transparent = true; (m as THREE.Material).opacity = opacity; });
   });
 }
 
 export function HologramScene() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const mouseRef = useRef({ tx: 0, ty: 0, x: 0, y: 0 });
   const [sceneMode, setSceneMode] = useState<SceneMode>("lite");
 
+  // Global mouse tracking
   useEffect(() => {
-    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const mobileQuery = window.matchMedia("(max-width: 820px)");
-
-    const updateSceneMode = () => {
-      setSceneMode(motionQuery.matches || mobileQuery.matches ? "lite" : "full");
+    const onMove = (e: MouseEvent) => {
+      mouseRef.current.tx = (e.clientX / window.innerWidth  - 0.5) * 2;
+      mouseRef.current.ty = (e.clientY / window.innerHeight - 0.5) * 2;
     };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
 
-    updateSceneMode();
-    motionQuery.addEventListener("change", updateSceneMode);
-    mobileQuery.addEventListener("change", updateSceneMode);
-
-    return () => {
-      motionQuery.removeEventListener("change", updateSceneMode);
-      mobileQuery.removeEventListener("change", updateSceneMode);
-    };
+  // Mode detection
+  useEffect(() => {
+    const mq  = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const mob = window.matchMedia("(max-width: 820px)");
+    const update = () => setSceneMode(mq.matches || mob.matches ? "lite" : "full");
+    update();
+    mq.addEventListener("change", update);
+    mob.addEventListener("change", update);
+    return () => { mq.removeEventListener("change", update); mob.removeEventListener("change", update); };
   }, []);
 
   useEffect(() => {
-    if (sceneMode !== "full") {
-      return;
-    }
-
+    if (sceneMode !== "full") return;
     const container = containerRef.current;
+    if (!container) return;
 
-    if (!container) {
-      return;
-    }
-
+    // ── Renderer ────────────────────────────────────────────────────────
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog("#04060d", 8, 24);
+    scene.fog = new THREE.FogExp2("#04060d", 0.011);
 
-    const camera = new THREE.PerspectiveCamera(46, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(0, 0.4, 8.2);
+    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 300);
+    camera.position.set(0, 0.4, 9);
 
-    const renderer = new THREE.WebGLRenderer({
-      alpha: true,
-      antialias: true,
-      powerPreference: "high-performance"
-    });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.35));
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor("#04060d", 0);
     container.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight("#dbeafe", 0.9);
-    scene.add(ambientLight);
+    // ── Lights ──────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight("#c7e8ff", 0.55));
+    const cyanL = new THREE.PointLight("#4df7ff", 65, 32); cyanL.position.set(5, 7, 5); scene.add(cyanL);
+    const magL  = new THREE.PointLight("#ff4fd8", 45, 24); magL.position.set(-4, -3, 4); scene.add(magL);
+    const bluL  = new THREE.PointLight("#2c8bff", 35, 40); bluL.position.set(0, 10, -6); scene.add(bluL);
+    const vioL  = new THREE.PointLight("#8b5cf6", 28, 30); vioL.position.set(-7, 1, 3); scene.add(vioL);
 
-    const cyanLight = new THREE.PointLight("#4df7ff", 42, 26);
-    cyanLight.position.set(4.2, 4.8, 4.2);
-    scene.add(cyanLight);
+    // ── Starfield ────────────────────────────────────────────────────────
+    const mkStars = (count: number, rMin: number, rMax: number, color: string, size: number, opacity: number) => {
+      const pos = new Float32Array(count * 3);
+      for (let i = 0; i < count; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi   = Math.acos(2 * Math.random() - 1);
+        const r     = rMin + Math.random() * (rMax - rMin);
+        pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+        pos[i * 3 + 1] = r * Math.cos(phi);
+        pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      return new THREE.Points(g, new THREE.PointsMaterial({ color, size, transparent: true, opacity, sizeAttenuation: true, depthWrite: false }));
+    };
+    scene.add(mkStars(2400, 28, 100, "#ffffff", 0.065, 0.65));
+    scene.add(mkStars(700,  14, 45,  "#4df7ff", 0.05,  0.45));
+    scene.add(mkStars(400,  18, 55,  "#8b5cf6", 0.055, 0.35));
 
-    const magentaLight = new THREE.PointLight("#ff4fd8", 28, 18);
-    magentaLight.position.set(-3.4, -2.5, 3);
-    scene.add(magentaLight);
-
-    const farBlueLight = new THREE.PointLight("#2c8bff", 18, 28);
-    farBlueLight.position.set(0, 6, -4);
-    scene.add(farBlueLight);
-
-    const particleCount = 1150;
-    const particlePositions = new Float32Array(particleCount * 3);
-    for (let index = 0; index < particleCount; index += 1) {
-      const stride = index * 3;
-      const radius = 5 + Math.random() * 7;
+    // ── Neural network ───────────────────────────────────────────────────
+    const NODE_N = 150;
+    const nodes: { x: number; y: number; z: number }[] = [];
+    const nodePosArr = new Float32Array(NODE_N * 3);
+    for (let i = 0; i < NODE_N; i++) {
       const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-
-      particlePositions[stride] = radius * Math.sin(phi) * Math.cos(theta);
-      particlePositions[stride + 1] = radius * Math.cos(phi) * 0.75;
-      particlePositions[stride + 2] = radius * Math.sin(phi) * Math.sin(theta);
+      const phi   = Math.acos(2 * Math.random() - 1);
+      const r     = 3.8 + Math.random() * 5.5;
+      nodes.push({
+        x: r * Math.sin(phi) * Math.cos(theta),
+        y: r * Math.cos(phi) * 0.6,
+        z: r * Math.sin(phi) * Math.sin(theta),
+      });
+      nodePosArr[i * 3]     = nodes[i].x;
+      nodePosArr[i * 3 + 1] = nodes[i].y;
+      nodePosArr[i * 3 + 2] = nodes[i].z;
     }
+    const nodeGeom = new THREE.BufferGeometry();
+    nodeGeom.setAttribute("position", new THREE.BufferAttribute(nodePosArr, 3));
+    scene.add(new THREE.Points(nodeGeom, new THREE.PointsMaterial({ color: "#4df7ff", size: 0.065, transparent: true, opacity: 0.85, sizeAttenuation: true, depthWrite: false })));
 
-    const particleGeometry = new THREE.BufferGeometry();
-    particleGeometry.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
-
-    const cyanParticles = new THREE.Points(
-      particleGeometry,
-      new THREE.PointsMaterial({
-        color: "#4df7ff",
-        size: 0.034,
-        transparent: true,
-        opacity: 0.78,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending
-      })
-    );
-    scene.add(cyanParticles);
-
-    const orbitFieldGeometry = new THREE.BufferGeometry();
-    const orbitFieldPositions = new Float32Array(320 * 3);
-    for (let index = 0; index < 320; index += 1) {
-      const stride = index * 3;
-      const angle = (index / 320) * Math.PI * 2;
-      const radius = 2.8 + Math.sin(index * 0.37) * 0.22;
-      orbitFieldPositions[stride] = Math.cos(angle) * radius;
-      orbitFieldPositions[stride + 1] = Math.sin(index * 0.31) * 0.2;
-      orbitFieldPositions[stride + 2] = Math.sin(angle) * radius;
+    // Connections
+    const CONN_DIST = 3.2;
+    const connArr: number[] = [];
+    for (let i = 0; i < NODE_N; i++) {
+      for (let j = i + 1; j < NODE_N; j++) {
+        const dx = nodes[i].x - nodes[j].x;
+        const dy = nodes[i].y - nodes[j].y;
+        const dz = nodes[i].z - nodes[j].z;
+        if (dx * dx + dy * dy + dz * dz < CONN_DIST * CONN_DIST) {
+          connArr.push(nodes[i].x, nodes[i].y, nodes[i].z, nodes[j].x, nodes[j].y, nodes[j].z);
+        }
+      }
     }
-    orbitFieldGeometry.setAttribute("position", new THREE.BufferAttribute(orbitFieldPositions, 3));
+    const connGeom = new THREE.BufferGeometry();
+    connGeom.setAttribute("position", new THREE.Float32BufferAttribute(connArr, 3));
+    const neuralLines = new THREE.LineSegments(connGeom, new THREE.LineBasicMaterial({ color: "#2c8bff", transparent: true, opacity: 0.11, depthWrite: false }));
+    scene.add(neuralLines);
 
-    const magentaParticles = new THREE.Points(
-      orbitFieldGeometry,
-      new THREE.PointsMaterial({
-        color: "#ff4fd8",
-        size: 0.05,
-        transparent: true,
-        opacity: 0.72,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending
-      })
+    // ── Grid floor ───────────────────────────────────────────────────────
+    const gFloor = new THREE.GridHelper(50, 36, "#2c8bff", "#0a1828");
+    gFloor.position.y = -3.8;
+    setMaterialOpacity(gFloor, 0.2);
+    scene.add(gFloor);
+
+    // ── Central hologram ─────────────────────────────────────────────────
+    const core = new THREE.Group();
+
+    const shellMesh = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(1.7, 2),
+      new THREE.MeshBasicMaterial({ color: "#4df7ff", wireframe: true, transparent: true, opacity: 0.17 })
     );
-    scene.add(magentaParticles);
+    core.add(shellMesh);
 
-    const gridPrimary = new THREE.GridHelper(34, 30, "#2c8bff", "#102538");
-    gridPrimary.position.set(0, -3.1, 0);
-    setMaterialOpacity(gridPrimary, 0.24);
-    scene.add(gridPrimary);
-
-    const gridSecondary = new THREE.GridHelper(18, 16, "#4df7ff", "#0d1a2c");
-    gridSecondary.position.set(0, -1.6, -2.5);
-    gridSecondary.rotation.x = Math.PI / 2.9;
-    setMaterialOpacity(gridSecondary, 0.08);
-    scene.add(gridSecondary);
-
-    const coreGroup = new THREE.Group();
-
-    const shell = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.55, 2),
-      new THREE.MeshBasicMaterial({
-        color: "#4df7ff",
-        wireframe: true,
-        transparent: true,
-        opacity: 0.2
-      })
+    const innerSph = new THREE.Mesh(
+      new THREE.SphereGeometry(1.15, 28, 28),
+      new THREE.MeshBasicMaterial({ color: "#7dd3fc", wireframe: true, transparent: true, opacity: 0.13 })
     );
-    coreGroup.add(shell);
+    innerSph.rotation.x = Math.PI / 5;
+    core.add(innerSph);
 
-    const sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(1.22, 26, 26),
-      new THREE.MeshBasicMaterial({
-        color: "#7dd3fc",
-        wireframe: true,
-        transparent: true,
-        opacity: 0.18
-      })
+    const octaEdge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.OctahedronGeometry(2.9, 0)),
+      new THREE.LineBasicMaterial({ color: "#8b5cf6", transparent: true, opacity: 0.2 })
     );
-    sphere.rotation.x = Math.PI / 5;
-    coreGroup.add(sphere);
+    core.add(octaEdge);
 
-    const innerHalo = new THREE.Mesh(
-      new THREE.RingGeometry(1.2, 1.55, 80),
-      new THREE.MeshBasicMaterial({
-        color: "#4df7ff",
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.12
-      })
+    // 3 orbital rings
+    const rings: THREE.Mesh[] = [];
+    [
+      { r: 2.15, color: "#ff4fd8", rx: Math.PI / 2, rz: 0 },
+      { r: 2.55, color: "#2c8bff", rx: 0,           rz: Math.PI / 2 },
+      { r: 1.9,  color: "#4df7ff", rx: Math.PI / 4, rz: Math.PI / 4 },
+    ].forEach(({ r, color, rx, rz }) => {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(r, 0.018, 16, 160),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.82 })
+      );
+      ring.rotation.x = rx;
+      ring.rotation.z = rz;
+      rings.push(ring);
+      core.add(ring);
+    });
+
+    // Halo disc
+    const halo = new THREE.Mesh(
+      new THREE.RingGeometry(1.35, 1.72, 80),
+      new THREE.MeshBasicMaterial({ color: "#4df7ff", side: THREE.DoubleSide, transparent: true, opacity: 0.09 })
     );
-    innerHalo.rotation.x = Math.PI / 2;
-    coreGroup.add(innerHalo);
+    halo.rotation.x = Math.PI / 2;
+    core.add(halo);
 
-    const orbitA = new THREE.Mesh(
-      new THREE.TorusGeometry(2.0, 0.026, 16, 140),
-      new THREE.MeshBasicMaterial({
-        color: "#ff4fd8",
-        transparent: true,
-        opacity: 0.85
-      })
-    );
-    orbitA.rotation.x = Math.PI / 2;
-    coreGroup.add(orbitA);
+    scene.add(core);
 
-    const orbitB = new THREE.Mesh(
-      new THREE.TorusGeometry(2.45, 0.012, 16, 140),
-      new THREE.MeshBasicMaterial({
-        color: "#2c8bff",
-        transparent: true,
-        opacity: 0.72
-      })
-    );
-    orbitB.rotation.z = Math.PI / 2;
-    coreGroup.add(orbitB);
+    // ── Ambient particle field ───────────────────────────────────────────
+    const ambPts = mkStars(1300, 5, 10, "#4df7ff", 0.032, 0.6);
+    scene.add(ambPts);
 
-    const dataFrame = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.OctahedronGeometry(2.6, 0)),
-      new THREE.LineBasicMaterial({
-        color: "#8b5cf6",
-        transparent: true,
-        opacity: 0.18
-      })
-    );
-    coreGroup.add(dataFrame);
-
-    scene.add(coreGroup);
-
+    // ── Render loop ──────────────────────────────────────────────────────
     const clock = new THREE.Clock();
-    let frameId = 0;
+    let raf = 0;
+
+    const render = () => {
+      const t = clock.getElapsedTime();
+
+      // Smooth mouse parallax on camera
+      const mr = mouseRef.current;
+      mr.x += (mr.tx - mr.x) * 0.04;
+      mr.y += (mr.ty - mr.y) * 0.04;
+      camera.position.x += (mr.x * 0.75 - camera.position.x) * 0.06;
+      camera.position.y += (-mr.y * 0.45 + 0.4 - camera.position.y) * 0.06;
+      camera.lookAt(0, 0, 0);
+
+      // Core motion
+      core.rotation.y = t * 0.15;
+      core.rotation.z = Math.sin(t * 0.18) * 0.055;
+      core.position.y = Math.sin(t * 0.48) * 0.18;
+
+      shellMesh.rotation.x = t * 0.08;
+      innerSph.rotation.y  = -t * 0.22;
+      octaEdge.rotation.y  = -t * 0.12;
+
+      rings[0].rotation.z = t * 0.3;
+      rings[1].rotation.x = t * 0.21;
+      rings[2].rotation.y = t * 0.38;
+
+      // Neural network pulse
+      (neuralLines.material as THREE.LineBasicMaterial).opacity = 0.08 + Math.sin(t * 0.7) * 0.05;
+
+      // Ambient particles
+      ambPts.rotation.y = -t * 0.022;
+      ambPts.rotation.x = Math.sin(t * 0.1) * 0.055;
+
+      // Light pulse
+      cyanL.intensity = 60 + Math.sin(t * 1.1) * 12;
+      magL.intensity  = 42 + Math.sin(t * 0.85 + 1.2) * 9;
+
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(render);
+    };
 
     const onResize = () => {
-      if (!container) {
-        return;
-      }
-
+      if (!container) return;
       camera.aspect = container.clientWidth / container.clientHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(container.clientWidth, container.clientHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.35));
-    };
-
-    const render = () => {
-      const elapsed = clock.getElapsedTime();
-      coreGroup.rotation.y = elapsed * 0.18;
-      coreGroup.rotation.z = Math.sin(elapsed * 0.18) * 0.08;
-      coreGroup.position.y = Math.sin(elapsed * 0.55) * 0.16;
-      shell.rotation.x = elapsed * 0.09;
-      sphere.rotation.y = -elapsed * 0.24;
-      orbitA.rotation.z = elapsed * 0.3;
-      orbitB.rotation.x = elapsed * 0.22;
-      dataFrame.rotation.y = -elapsed * 0.16;
-      cyanParticles.rotation.y = -elapsed * 0.03;
-      cyanParticles.rotation.x = Math.sin(elapsed * 0.14) * 0.07;
-      magentaParticles.rotation.y = elapsed * 0.11;
-      renderer.render(scene, camera);
-      frameId = window.requestAnimationFrame(render);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     };
 
     window.addEventListener("resize", onResize);
@@ -265,25 +238,9 @@ export function HologramScene() {
 
     return () => {
       window.removeEventListener("resize", onResize);
-      window.cancelAnimationFrame(frameId);
-      particleGeometry.dispose();
-      orbitFieldGeometry.dispose();
-      (cyanParticles.material as THREE.Material).dispose();
-      (magentaParticles.material as THREE.Material).dispose();
-      shell.geometry.dispose();
-      (shell.material as THREE.Material).dispose();
-      sphere.geometry.dispose();
-      (sphere.material as THREE.Material).dispose();
-      innerHalo.geometry.dispose();
-      (innerHalo.material as THREE.Material).dispose();
-      orbitA.geometry.dispose();
-      (orbitA.material as THREE.Material).dispose();
-      orbitB.geometry.dispose();
-      (orbitB.material as THREE.Material).dispose();
-      dataFrame.geometry.dispose();
-      (dataFrame.material as THREE.Material).dispose();
+      cancelAnimationFrame(raf);
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
     };
   }, [sceneMode]);
 
@@ -291,19 +248,20 @@ export function HologramScene() {
     <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
       <div
         ref={containerRef}
-        className={`absolute inset-0 transition-opacity duration-500 ${
-          sceneMode === "full" ? "opacity-100" : "opacity-0"
-        }`}
+        className={`absolute inset-0 transition-opacity duration-700 ${sceneMode === "full" ? "opacity-100" : "opacity-0"}`}
       />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(77,247,255,0.14),_transparent_28%),radial-gradient(circle_at_75%_18%,_rgba(255,79,216,0.12),_transparent_22%),radial-gradient(circle_at_50%_110%,_rgba(44,139,255,0.16),_transparent_34%)]" />
-      <div className="grid-scanlines absolute inset-0 opacity-30" />
-      <div className="grid-noise absolute inset-0 opacity-25" />
-      <div className="absolute left-1/2 top-[16%] h-72 w-72 -translate-x-1/2 rounded-full bg-grid-cyan/10 blur-3xl" />
-      <div className="absolute left-[18%] top-[24%] h-56 w-56 rounded-full bg-grid-magenta/10 blur-3xl" />
-      <div className="absolute bottom-[12%] right-[10%] h-64 w-64 rounded-full bg-grid-blue/10 blur-3xl" />
-      {sceneMode === "lite" ? (
-        <div className="absolute inset-x-0 bottom-0 h-[42vh] bg-[linear-gradient(180deg,rgba(4,6,13,0)_0%,rgba(4,6,13,0.38)_32%,rgba(4,6,13,0.86)_100%)]" />
-      ) : null}
+      {/* CSS ambient layers */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_18%_12%,rgba(77,247,255,0.1),transparent_28%),radial-gradient(ellipse_at_78%_16%,rgba(255,79,216,0.09),transparent_24%),radial-gradient(ellipse_at_50%_105%,rgba(44,139,255,0.12),transparent_32%),radial-gradient(ellipse_at_8%_75%,rgba(139,92,246,0.07),transparent_22%)]" />
+      <div className="grid-scanlines absolute inset-0 opacity-22" />
+      <div className="grid-noise absolute inset-0 opacity-18" />
+      {/* Glow blobs */}
+      <div className="absolute left-1/2 top-[13%] h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-grid-cyan/[0.055] blur-[90px]" />
+      <div className="absolute left-[12%] top-[20%] h-72 w-72 rounded-full bg-grid-magenta/[0.055] blur-[70px]" />
+      <div className="absolute bottom-[8%] right-[6%] h-80 w-80 rounded-full bg-grid-blue/[0.055] blur-[80px]" />
+      <div className="absolute left-[60%] top-[52%] h-56 w-56 rounded-full bg-grid-violet/[0.045] blur-[60px]" />
+      {sceneMode === "lite" && (
+        <div className="absolute inset-x-0 bottom-0 h-[50vh] bg-[linear-gradient(180deg,rgba(4,6,13,0)_0%,rgba(4,6,13,0.42)_38%,rgba(4,6,13,0.9)_100%)]" />
+      )}
     </div>
   );
 }
