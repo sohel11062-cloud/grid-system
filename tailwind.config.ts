@@ -14,39 +14,82 @@ const config: Config = {
           ember: "#ff7a18",
           magenta: "#ff4fd8",
           text: "#e6fbff",
-          muted: "#91a9c8"
-        }
+          muted: "#91a9c8",
+        },
       },
       boxShadow: {
         neon: "0 0 0 1px rgba(77,247,255,0.18), 0 0 36px rgba(44,139,255,0.18), 0 0 72px rgba(255,79,216,0.12)",
-        ember: "0 0 30px rgba(255,122,24,0.18)"
+        "neon-hover":
+          "0 0 0 1px rgba(77,247,255,0.32), 0 8px 48px rgba(44,139,255,0.28), 0 0 96px rgba(255,79,216,0.18)",
+        "neon-cyan":
+          "0 0 0 1px rgba(77,247,255,0.4), 0 0 24px rgba(77,247,255,0.3)",
+        ember: "0 0 30px rgba(255,122,24,0.18)",
       },
       backgroundImage: {
         "grid-radial":
-          "radial-gradient(circle at top, rgba(44,139,255,0.2), transparent 30%), radial-gradient(circle at 80% 20%, rgba(255,79,216,0.16), transparent 25%), linear-gradient(180deg, rgba(4,6,13,0.84) 0%, rgba(4,6,13,0.98) 100%)"
+          "radial-gradient(circle at top, rgba(44,139,255,0.2), transparent 30%), radial-gradient(circle at 80% 20%, rgba(255,79,216,0.16), transparent 25%), linear-gradient(180deg, rgba(4,6,13,0.84) 0%, rgba(4,6,13,0.98) 100%)",
       },
       keyframes: {
         pulseLine: {
           "0%, 100%": { opacity: "0.45", transform: "scaleX(0.96)" },
-          "50%": { opacity: "1", transform: "scaleX(1)" }
+          "50%": { opacity: "1", transform: "scaleX(1)" },
         },
         floatSlow: {
           "0%, 100%": { transform: "translateY(0px)" },
-          "50%": { transform: "translateY(-8px)" }
+          "50%": { transform: "translateY(-8px)" },
         },
         chromaDrift: {
           "0%, 100%": { transform: "translate3d(0, 0, 0)", opacity: "0.55" },
-          "50%": { transform: "translate3d(0, -6px, 0)", opacity: "0.95" }
-        }
+          "50%": { transform: "translate3d(0, -6px, 0)", opacity: "0.95" },
+        },
+        // ── Phase 2 additions ──────────────────────────────────────────
+        terminalBlink: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+        statusPulse: {
+          "0%, 100%": {
+            boxShadow: "0 0 0 0 rgba(77, 247, 255, 0.7)",
+            transform: "scale(1)",
+          },
+          "70%": {
+            boxShadow: "0 0 0 8px rgba(77, 247, 255, 0)",
+            transform: "scale(1.15)",
+          },
+        },
+        progressGlow: {
+          "0%, 100%": { opacity: "0.6", transform: "scale(1)" },
+          "50%": { opacity: "1", transform: "scale(1.4)" },
+        },
+        ripple: {
+          "0%": { transform: "scale(0)", opacity: "0.5" },
+          "100%": { transform: "scale(4)", opacity: "0" },
+        },
+        cardFlicker: {
+          "0%, 98%, 100%": { opacity: "1" },
+          "99%": { opacity: "0.92" },
+        },
+        borderSpin: {
+          "0%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+          "100%": { backgroundPosition: "0% 50%" },
+        },
       },
       animation: {
         pulseLine: "pulseLine 2.6s ease-in-out infinite",
         floatSlow: "floatSlow 6s ease-in-out infinite",
-        chromaDrift: "chromaDrift 6s ease-in-out infinite"
-      }
-    }
+        chromaDrift: "chromaDrift 6s ease-in-out infinite",
+        // ── Phase 2 additions ──────────────────────────────────────────
+        "terminal-blink": "terminalBlink 1.1s step-end infinite",
+        "status-pulse": "statusPulse 2s ease-out infinite",
+        "progress-glow": "progressGlow 1.8s ease-in-out infinite",
+        ripple: "ripple 0.6s linear",
+        "card-flicker": "cardFlicker 8s ease-in-out infinite",
+        "border-spin": "borderSpin 4s ease infinite",
+      },
+    },
   },
-  plugins: []
+  plugins: [],
 };
 
 export default config;
