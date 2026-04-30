@@ -216,6 +216,7 @@ export async function searchOrdersByIdentity(identity: {
   return response.orders ?? [];
 }
 
+<<<<<<< HEAD
 // ─── Coupons ──────────────────────────────────────────────────────────────────
 
 /**
@@ -291,3 +292,83 @@ export async function createMoneyOffCoupon(input: {
 
   return response;
 }
+=======
+// ─── Coupons (FINAL STABLE VERSION) ──────────────────────────────────────────
+
+export async function createMoneyOffCoupon(input: {
+  code: string;
+  amount: number;
+}): Promise<{ id: string }> {
+  const url = "https://www.wixapis.com/stores/v2/coupons";
+
+  // 🔐 Validate & normalize amount
+  const amount = Math.floor(Number(input.amount));
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new AppError("Invalid coupon amount", 400);
+  }
+
+  const now = Date.now();
+
+  const specification = {
+    name: `THE GRID — ₹${amount} REWARD`,
+    code: input.code,
+
+    // ✅ Required timestamps
+    startTime: now.toString(),
+
+    // 🔥 OPTIONAL BUT STRONGLY RECOMMENDED (7-day expiry)
+    expirationTime: (now + 7 * 24 * 60 * 60 * 1000).toString(),
+
+    active: true,
+
+    // 🔥 CRITICAL — one-time use
+    usageLimit: 1,
+
+    scope: {
+      namespace: "stores",
+    },
+
+    // 🔥 Required for Wix to detect coupon type
+    type: "MoneyOff",
+
+    // 🔥 MUST be number
+    moneyOffAmount: amount,
+
+    // OPTIONAL (future analytics / filtering)
+    tags: ["grid_reward"],
+  };
+
+  console.log("[WIX COUPON REQUEST]", JSON.stringify(specification, null, 2));
+
+  try {
+    const response = await wixRequest<{ id: string }>(url, {
+      method: "POST",
+      auth: "api-key",
+      bodyJson: {
+        specification,
+      },
+    });
+
+    console.log("[WIX COUPON RESPONSE]", response);
+
+    if (!response?.id) {
+      throw new AppError(
+        "Coupon created but no ID returned",
+        500,
+        response
+      );
+    }
+
+    return response;
+  } catch (error) {
+    console.error("[WIX COUPON ERROR]", {
+      code: input.code,
+      amount,
+      error,
+    });
+
+    throw error;
+  }
+}
+>>>>>>> a0ea7fa (Fix coupon creation + production updates)
