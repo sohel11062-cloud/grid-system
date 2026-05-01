@@ -287,8 +287,8 @@ export async function searchOrdersByIdentity(identity: {
  * POST https://www.wixapis.com/stores/v2/coupons
  *
  * Payload rules (non-negotiable per Wix Stores v2):
- *   specification.type             = "MoneyOff"       (string literal)
- *   specification.moneyOffAmount   = number           (NOT string)
+ *   specification.type             = "MoneyOff"
+ *   specification.moneyOffAmount   = number
  *   specification.usageLimit       = 1
  *   specification.startTime        = string ms epoch
  *   specification.expirationTime   = string ms epoch
@@ -296,11 +296,11 @@ export async function searchOrdersByIdentity(identity: {
  */
 export async function createMoneyOffCoupon(input: {
   code:   string;
-  amount: number;  // rupees — validated as positive multiple of 100 before calling here
-}): Promise<WixCouponCreateResponse> {
+  amount: number;
+}): Promise<{ id: string }> {
   const env = getEnv();
 
-  // Strict payload validation before sending
+  // ─── Validation ──────────────────────────────────────────────────────────────
   const numericAmount = Number(input.amount);
   if (!Number.isFinite(numericAmount) || numericAmount <= 0 || !Number.isInteger(numericAmount)) {
     throw new AppError(
@@ -316,44 +316,51 @@ export async function createMoneyOffCoupon(input: {
   }
 
   const nowMs    = Date.now();
-  const expiryMs = nowMs + 365 * 24 * 60 * 60 * 1000; // 1 year
+  const expiryMs = nowMs + 365 * 24 * 60 * 60 * 1000;
 
+  // ─── Payload ────────────────────────────────────────────────────────────────
   const payload: JsonBody = {
     specification: {
       name:           `THE GRID — ₹${numericAmount} REWARD`,
       code,
-      startTime:      String(nowMs),    // string milliseconds — REQUIRED
-      expirationTime: String(expiryMs), // string milliseconds — REQUIRED
+      startTime:      String(nowMs),
+      expirationTime: String(expiryMs),
       active:         true,
       usageLimit:     1,
       scope:          { namespace: env.GRID_COUPON_SCOPE_NAMESPACE || "stores" },
-      type:           "MoneyOff",       // string literal — REQUIRED
-      moneyOffAmount: numericAmount,    // number — NOT string
+      type:           "MoneyOff",
+      moneyOffAmount: numericAmount,
     },
   };
 
   console.info("[THE_GRID_COUPON_REQUEST]", {
     endpoint: env.WIX_COUPONS_ENDPOINT,
     code,
-    amount:   numericAmount,
+    amount: numericAmount,
   });
 
-  // No automatic retry here — duplicate codes are handled in coupon-service.ts
-const res = await wixRequest<any>(
-  env.WIX_COUPONS_ENDPOINT,
-  { method: "POST", bodyJson: payload }
-);
-
-console.info("[THE_GRID_COUPON_RESPONSE_ID]", res?.id ?? "MISSING");
-
-const couponId = res?.id ?? res?.coupon?.id;
-
-if (!couponId) {
-  throw new AppError(
-    "Wix coupon API returned 200 but no coupon id.",
-    500,
-    ErrorCode.COUPON_CREATE_FAILED
+  // ─── API Call ───────────────────────────────────────────────────────────────
+  const res = await wixRequest<any>(
+    env.WIX_COUPONS_ENDPOINT,
+    { method: "POST", bodyJson: payload }
   );
-}
 
-return { id: couponId };
+  console.info("[THE_GRID_COUPON_RESPONSE]", res);
+
+  // ─── FIXED RESPONSE PARSING ─────────────────────────────────────────────────
+  const couponId =
+    res?.id ||
+    res?.coupon?.id ||
+    res?.data?.id ||
+    res?.data?.coupon?.id;
+
+  if (!couponId) {
+    throw new AppError(
+      "Wix coupon API returned 200 but no coupon id.",
+      500,
+      ErrorCode.COUPON_CREATE_FAILED
+    );
+  }
+
+  return { id: couponId };
+}
