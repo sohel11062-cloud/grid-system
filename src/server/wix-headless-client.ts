@@ -106,7 +106,7 @@ export async function getAuthenticatedMember(tokens: Tokens): Promise<Authentica
   const m = res.member;
 
   if (!m?._id || !m.loginEmail) {
-    throw new AppError("Wix did not return a usable member identity.", 401, res);
+    throw new AppError("Wix did not return a usable member identity.", 401);
   }
 
   return {
