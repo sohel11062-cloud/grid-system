@@ -73,7 +73,7 @@ export async function redeemMemberCreds(
 
     try {
       const wixRes = await createMoneyOffCoupon({ code, amount: rupeeInt });
-      wixCouponId  = wixRes.coupon!.id!;
+      wixCouponId = wixRes.id;
       finalCode    = code;
       break; // success
     } catch (err) {
