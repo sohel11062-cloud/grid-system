@@ -12,7 +12,6 @@ export function randomState(bytes = 32): string {
 }
 
 export function createCouponCode(): string {
-  // Format: GRID-XXXX-XXXX-XXXX (uppercase hex, 12 hex chars total)
   const seg = () => randomBytes(2).toString("hex").toUpperCase();
-  return `GRID-${seg()}${seg()}-${seg()}${seg()}-${seg()}${seg()}`;
+  return `GRID-${seg()}-${seg()}-${seg()}`;
 }
