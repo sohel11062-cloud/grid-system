@@ -339,7 +339,7 @@ export async function createMoneyOffCoupon(input: {
   });
 
   // No automatic retry here — duplicate codes are handled in coupon-service.ts
-const res = await wixRequest<WixCouponCreateResponse>(
+const res = await wixRequest<any>(
   env.WIX_COUPONS_ENDPOINT,
   { method: "POST", bodyJson: payload }
 );
