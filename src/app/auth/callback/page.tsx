@@ -2,96 +2,113 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [message, setMessage] = useState("Decrypting member credentials...");
+  const [progress, setProgress] = useState(20);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function completeLogin() {
-      const currentUrl = new URL(window.location.href);
-      const hashParams = new URLSearchParams(currentUrl.hash.replace(/^#/, ""));
-      const params = hashParams.get("code") ? hashParams : currentUrl.searchParams;
+    async function run() {
+      // Parse code + state from URL (supports both hash and query params)
+      const url = new URL(window.location.href);
+      const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
+      const params = hash.get("code") ? hash : url.searchParams;
+
       const authError = params.get("error");
-      const code = params.get("code");
-      const state = params.get("state");
+      const code      = params.get("code");
+      const state     = params.get("state");
 
       if (authError) {
-        if (!cancelled) {
-          setError(`Wix returned "${authError}".`);
-        }
+        if (!cancelled) setError(`Wix returned an error: "${authError}". Please try again.`);
         return;
       }
 
       if (!code || !state) {
-        if (!cancelled) {
-          setError("Missing login code. Restart the sign-in flow.");
-        }
+        if (!cancelled) setError("Missing login parameters. Please restart the sign-in flow.");
         return;
       }
 
       try {
-        setMessage("Binding session to THE GRID...");
+        if (!cancelled) { setMessage("Binding session to THE GRID..."); setProgress(55); }
 
-        const response = await fetch(`${API_BASE_URL}/api/auth/exchange`, {
+        const res = await fetch(`${API_BASE_URL}/api/auth/exchange`, {
           method: "POST",
           credentials: "include",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ code, state })
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, state }),
         });
 
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(payload?.error || "Login exchange failed.");
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({ error: "Exchange failed." })) as { error?: string };
+          throw new Error(body.error ?? "Login exchange failed.");
         }
 
-        const payload = (await response.json()) as {
-          ok: boolean;
-          returnTo?: string;
-        };
+        const body = await res.json() as { ok: boolean; returnTo?: string };
 
         if (!cancelled) {
           setMessage("Session accepted. Entering the system...");
-          router.replace(payload.returnTo || "/");
+          setProgress(100);
+          setTimeout(() => router.replace(body.returnTo || "/"), 500);
         }
-      } catch (reason) {
+      } catch (e) {
         if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : "Could not complete sign-in.");
+          setError(e instanceof Error ? e.message : "Could not complete sign-in.");
         }
       }
     }
 
-    completeLogin();
-
-    return () => {
-      cancelled = true;
-    };
+    run();
+    return () => { cancelled = true; };
   }, [router]);
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center px-6 py-16">
-      <div className="panel-shell z-10 max-w-xl">
-        <p className="panel-title">AUTH CALLBACK</p>
-        <h1 className="mt-4 text-3xl uppercase tracking-[0.2em] text-grid-text">THE GRID</h1>
-        <p className="mt-4 text-sm text-grid-muted">{error ?? message}</p>
+    <main className="relative flex min-h-screen items-center justify-center bg-grid-bg px-6 py-16">
+      {/* Background */}
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(77,247,255,0.08),transparent_40%)]" />
 
-        {error ? (
-          <a href="/" className="grid-button mt-8">
-            Return To Login
-          </a>
-        ) : (
-          <div className="mt-8 h-1 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full w-full origin-left animate-pulseLine bg-gradient-to-r from-grid-cyan via-grid-blue to-grid-magenta" />
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="panel-shell z-10 w-full max-w-md"
+      >
+        <p className="panel-title">AUTH CALLBACK</p>
+        <h1 className="mt-4 text-3xl uppercase tracking-[0.2em] text-white">THE GRID</h1>
+
+        <p className={`mt-4 text-sm ${error ? "text-red-400" : "text-grid-muted"}`}>
+          {error ?? message}
+        </p>
+
+        {!error && (
+          <div className="progress-track mt-8">
+            <motion.div
+              className="progress-fill"
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {progress > 10 && <span className="progress-orb" />}
+            </motion.div>
           </div>
         )}
-      </div>
+
+        {error && (
+          <motion.a
+            href="/"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className="grid-button mt-8 inline-flex"
+          >
+            Return To Login
+          </motion.a>
+        )}
+      </motion.div>
     </main>
   );
 }

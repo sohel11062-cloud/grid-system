@@ -1,11 +1,11 @@
 import "server-only";
 
 import {
-  TokenRole,
   createClient,
   OAuthStrategy,
+  TokenRole,
   type OauthData,
-  type Tokens
+  type Tokens,
 } from "@wix/sdk";
 import { contacts } from "@wix/crm";
 import { members } from "@wix/members";
@@ -14,118 +14,107 @@ import { products } from "@wix/stores";
 import { AppError } from "@/server/errors";
 import type { GridOAuthState, GridRefreshTokenRole, GridSession } from "@/server/session";
 
-function getWixClientId() {
-  const clientId = process.env.WIX_CLIENT_ID;
-
-  if (!clientId) {
-    throw new AppError("WIX_CLIENT_ID is required for Wix Headless login.", 500);
-  }
-
-  return clientId;
-}
+// ─── Client factory ───────────────────────────────────────────────────────────
 
 export function createHeadlessWixClient(tokens?: Tokens) {
-  const clientId = getWixClientId();
+  const clientId = process.env.WIX_CLIENT_ID;
+  if (!clientId) throw new AppError("WIX_CLIENT_ID is not configured.", 500);
 
   return createClient({
     modules: { products, members, contacts },
-    auth: OAuthStrategy(tokens ? { clientId, tokens } : { clientId })
+    auth: OAuthStrategy(tokens ? { clientId, tokens } : { clientId }),
   });
 }
 
-export function createOauthStateRecord(oauthData: OauthData): GridOAuthState {
+// ─── OAuth state serialisation ────────────────────────────────────────────────
+
+export function createOauthStateRecord(data: OauthData): GridOAuthState {
   return {
-    state: oauthData.state,
-    codeChallenge: oauthData.codeChallenge,
-    codeVerifier: oauthData.codeVerifier,
-    redirectUri: oauthData.redirectUri,
-    originalUri: oauthData.originalUri,
-    createdAt: new Date().toISOString()
+    state:          data.state,
+    codeChallenge:  data.codeChallenge,
+    codeVerifier:   data.codeVerifier,
+    redirectUri:    data.redirectUri,
+    originalUri:    data.originalUri,
+    createdAt:      new Date().toISOString(),
   };
 }
 
-export function toOauthData(oauthState: GridOAuthState): OauthData {
+export function toOauthData(state: GridOAuthState): OauthData {
   return {
-    state: oauthState.state,
-    codeChallenge: oauthState.codeChallenge,
-    codeVerifier: oauthState.codeVerifier,
-    redirectUri: oauthState.redirectUri,
-    originalUri: oauthState.originalUri
+    state:         state.state,
+    codeChallenge: state.codeChallenge,
+    codeVerifier:  state.codeVerifier,
+    redirectUri:   state.redirectUri,
+    originalUri:   state.originalUri,
   };
 }
 
-function toRefreshTokenRole(role: TokenRole): GridRefreshTokenRole {
-  if (role === TokenRole.MEMBER) {
-    return "member";
-  }
+// ─── Token conversion ─────────────────────────────────────────────────────────
 
-  if (role === TokenRole.VISITOR) {
-    return "visitor";
+function sdkRoleToGrid(role: TokenRole): GridRefreshTokenRole {
+  switch (role) {
+    case TokenRole.MEMBER:  return "member";
+    case TokenRole.VISITOR: return "visitor";
+    default:                return "none";
   }
-
-  return "none";
 }
 
-function toTokenRole(role: GridRefreshTokenRole): TokenRole {
-  if (role === "member") {
-    return TokenRole.MEMBER;
+function gridRoleToSdk(role: GridRefreshTokenRole): TokenRole {
+  switch (role) {
+    case "member":  return TokenRole.MEMBER;
+    case "visitor": return TokenRole.VISITOR;
+    default:        return TokenRole.NONE;
   }
-
-  if (role === "visitor") {
-    return TokenRole.VISITOR;
-  }
-
-  return TokenRole.NONE;
 }
 
 export function tokensToSessionFields(tokens: Tokens) {
   return {
-    accessToken: tokens.accessToken.value,
-    refreshToken: tokens.refreshToken.value,
-    refreshTokenRole: toRefreshTokenRole(tokens.refreshToken.role),
-    accessTokenExpiresAt: new Date(tokens.accessToken.expiresAt).toISOString()
+    accessToken:           tokens.accessToken.value,
+    refreshToken:          tokens.refreshToken.value,
+    refreshTokenRole:      sdkRoleToGrid(tokens.refreshToken.role),
+    accessTokenExpiresAt:  new Date(tokens.accessToken.expiresAt).toISOString(),
   };
 }
 
 export function sessionToSdkTokens(session: GridSession): Tokens {
   return {
     accessToken: {
-      value: session.accessToken,
-      expiresAt: new Date(session.accessTokenExpiresAt).getTime()
+      value:     session.accessToken,
+      expiresAt: new Date(session.accessTokenExpiresAt).getTime(),
     },
     refreshToken: {
       value: session.refreshToken,
-      role: toTokenRole(session.refreshTokenRole)
-    }
+      role:  gridRoleToSdk(session.refreshTokenRole),
+    },
   };
 }
 
+// ─── Authenticated member identity ────────────────────────────────────────────
+
 export interface AuthenticatedGridMember {
-  memberId: string;
-  contactId: string | null;
-  email: string;
-  nickname: string | null;
-  firstName: string | null;
-  lastName: string | null;
+  memberId:   string;
+  contactId:  string | null;
+  email:      string;
+  nickname:   string | null;
+  firstName:  string | null;
+  lastName:   string | null;
 }
 
 export async function getAuthenticatedMember(tokens: Tokens): Promise<AuthenticatedGridMember> {
-  const wixClient = createHeadlessWixClient(tokens);
-  const response = await wixClient.members.getCurrentMember({
-    fieldsets: ["FULL"]
-  });
-  const member = response.member;
+  const client = createHeadlessWixClient(tokens);
+  const res = await client.members.getCurrentMember({ fieldsets: ["FULL"] });
+  const m = res.member;
 
-  if (!member?._id || !member.loginEmail) {
-    throw new AppError("Wix did not return a usable member identity.", 401, response);
+  if (!m?._id || !m.loginEmail) {
+    throw new AppError("Wix did not return a usable member identity.", 401, res);
   }
 
   return {
-    memberId: member._id,
-    contactId: member.contactId ?? null,
-    email: member.loginEmail,
-    nickname: member.profile?.nickname ?? null,
-    firstName: member.contact?.firstName ?? null,
-    lastName: member.contact?.lastName ?? null
+    memberId:  m._id,
+    contactId: m.contactId ?? null,
+    email:     m.loginEmail,
+    nickname:  m.profile?.nickname ?? null,
+    firstName: m.contact?.firstName ?? null,
+    lastName:  m.contact?.lastName ?? null,
   };
 }

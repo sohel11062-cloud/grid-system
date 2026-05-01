@@ -4,5 +4,11 @@
       "path": "/api/cron/sync",
       "schedule": "0 2 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 30
+    }
+  }
 }

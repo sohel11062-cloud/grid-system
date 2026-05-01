@@ -4,44 +4,43 @@ import { useEffect, useRef, useState } from "react";
 
 interface TerminalTextProps {
   text: string;
-  /** Characters per second */
   speed?: number;
-  className?: string;
-  cursor?: boolean;
-  /** Delay before typing starts, ms */
   delay?: number;
+  cursor?: boolean;
+  className?: string;
 }
 
 export function TerminalText({
   text,
   speed = 38,
-  className = "",
-  cursor = true,
   delay = 400,
+  cursor = true,
+  className = "",
 }: TerminalTextProps) {
   const [displayed, setDisplayed] = useState("");
-  const [finished, setFinished] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [done, setDone]           = useState(false);
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setDisplayed("");
-    setFinished(false);
+    setDone(false);
 
-    const start = setTimeout(() => {
+    startRef.current = setTimeout(() => {
       let i = 0;
-      intervalRef.current = setInterval(() => {
+      timerRef.current = setInterval(() => {
         i++;
         setDisplayed(text.slice(0, i));
         if (i >= text.length) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          setFinished(true);
+          if (timerRef.current) clearInterval(timerRef.current);
+          setDone(true);
         }
       }, 1000 / speed);
     }, delay);
 
     return () => {
-      clearTimeout(start);
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (startRef.current) clearTimeout(startRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [text, speed, delay]);
 
@@ -51,9 +50,8 @@ export function TerminalText({
       {cursor && (
         <span
           className={[
-            "ml-0.5 inline-block h-[0.9em] w-0.5 translate-y-[0.05em] align-middle",
-            "bg-grid-cyan",
-            finished ? "animate-terminal-blink" : "opacity-100",
+            "ml-px inline-block h-[0.85em] w-0.5 translate-y-[0.06em] align-middle bg-grid-cyan",
+            done ? "animate-terminal-blink" : "opacity-100",
           ].join(" ")}
         />
       )}

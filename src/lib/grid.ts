@@ -1,3 +1,5 @@
+// ─── Tier types ───────────────────────────────────────────────────────────────
+
 export type GridTierKey =
   | "THE_GLITCH"
   | "NETRUNNER"
@@ -13,6 +15,8 @@ export interface GridTier {
   mantra: string;
 }
 
+// ─── Order types ──────────────────────────────────────────────────────────────
+
 export interface GridOrderSummary {
   id: string;
   number: string;
@@ -24,8 +28,15 @@ export interface GridOrderSummary {
   items: string[];
 }
 
-// Added FAILED — coupons where Wix creation failed (creds were NOT deducted)
-export type GridCouponStatus = "ACTIVE" | "REDEEMED" | "EXPIRED" | "LOCAL_ONLY" | "FAILED";
+// ─── Coupon types ─────────────────────────────────────────────────────────────
+
+/**
+ * ACTIVE   — Wix coupon created and usable
+ * REDEEMED — coupon has been applied to an order
+ * EXPIRED  — past its expiration
+ * FAILED   — Wix coupon creation failed (creds NOT deducted)
+ */
+export type GridCouponStatus = "ACTIVE" | "REDEEMED" | "EXPIRED" | "FAILED";
 
 export interface GridCouponRecord {
   id: string;
@@ -40,6 +51,8 @@ export interface GridCouponRecord {
   wixCouponId?: string;
   note?: string;
 }
+
+// ─── Ledger types ─────────────────────────────────────────────────────────────
 
 export interface GridMemberLedger {
   memberId: string;
@@ -63,12 +76,16 @@ export interface GridMemberLedger {
   syncedAt: string;
 }
 
+// ─── Leaderboard ──────────────────────────────────────────────────────────────
+
 export interface GridLeaderboardEntry {
   memberId: string;
   username: string;
   level: GridTierKey;
   lifetimeCreds: number;
 }
+
+// ─── Dashboard payload ────────────────────────────────────────────────────────
 
 export interface GridDashboardData {
   member: {
@@ -99,13 +116,17 @@ export interface GridDashboardData {
   };
 }
 
+// ─── Tier definitions ─────────────────────────────────────────────────────────
+
 export const GRID_TIERS: GridTier[] = [
-  { key: "THE_GLITCH",      min: 0,       max: 50000,   label: "THE_GLITCH",      mantra: "Entry node. Signal unstable." },
-  { key: "NETRUNNER",       min: 50001,   max: 150000,  label: "NETRUNNER",       mantra: "Network access expanded." },
-  { key: "SYS-ADMIN",       min: 150001,  max: 350000,  label: "SYS-ADMIN",       mantra: "Privilege escalation complete." },
-  { key: "THE_ARCHITECT",   min: 350001,  max: 1000000, label: "THE_ARCHITECT",   mantra: "Reality edit access enabled." },
-  { key: "THE_SINGULARITY", min: 1000001, max: null,    label: "THE_SINGULARITY", mantra: "System and self are one." },
+  { key: "THE_GLITCH",      min: 0,        max: 50000,   label: "THE_GLITCH",      mantra: "Entry node. Signal unstable." },
+  { key: "NETRUNNER",       min: 50001,    max: 150000,  label: "NETRUNNER",       mantra: "Network access expanded." },
+  { key: "SYS-ADMIN",       min: 150001,   max: 350000,  label: "SYS-ADMIN",       mantra: "Privilege escalation complete." },
+  { key: "THE_ARCHITECT",   min: 350001,   max: 1000000, label: "THE_ARCHITECT",   mantra: "Reality edit access enabled." },
+  { key: "THE_SINGULARITY", min: 1000001,  max: null,    label: "THE_SINGULARITY", mantra: "System and self are one." },
 ];
+
+// ─── Tier helpers ─────────────────────────────────────────────────────────────
 
 export function getGridTier(creds: number): GridTier {
   return (
@@ -119,7 +140,7 @@ export function getNextGridTier(creds: number): GridTier | null {
   return idx === -1 || idx === GRID_TIERS.length - 1 ? null : GRID_TIERS[idx + 1];
 }
 
-export function getGridProgress(creds: number) {
+export function getGridProgress(creds: number): { ratio: number; remaining: number } {
   const current = getGridTier(creds);
   const next = getNextGridTier(creds);
   if (!next || current.max === null) return { ratio: 1, remaining: 0 };
@@ -131,6 +152,8 @@ export function getGridProgress(creds: number) {
   };
 }
 
+// ─── Math helpers ─────────────────────────────────────────────────────────────
+
 export function rupeesToCreds(rupees: number): number {
   return Math.max(Math.round(rupees), 0);
 }
@@ -139,14 +162,20 @@ export function credsToRupees(creds: number): number {
   return Math.max(Number((creds / 100).toFixed(2)), 0);
 }
 
+/**
+ * Safely parse a monetary amount from Wix API.
+ * Wix often returns amounts as strings like "1500.00".
+ */
 export function normaliseAmount(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
-    const parsed = Number(value.replace(/[^0-9.-]/g, ""));
-    return Number.isFinite(parsed) ? parsed : 0;
+    const parsed = Number(value.replace(/[^\d.-]/g, ""));
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
   }
   return 0;
 }
+
+// ─── Format helpers ───────────────────────────────────────────────────────────
 
 export function formatIndianCurrency(value: number): string {
   return new Intl.NumberFormat("en-IN", {

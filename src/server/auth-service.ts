@@ -9,102 +9,113 @@ import {
   getAuthenticatedMember,
   sessionToSdkTokens,
   toOauthData,
-  tokensToSessionFields
+  tokensToSessionFields,
 } from "@/server/wix-headless-client";
 
-function resolveUsername(member: Awaited<ReturnType<typeof getAuthenticatedMember>>) {
-  const parts = [member.firstName, member.lastName].filter(Boolean);
-  return member.nickname || parts.join(" ") || member.email || "UNKNOWN_USER";
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function resolveUsername(m: {
+  nickname: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string;
+}): string {
+  if (m.nickname?.trim()) return m.nickname.trim();
+  const full = [m.firstName, m.lastName].filter(Boolean).join(" ").trim();
+  if (full) return full;
+  if (m.email?.trim()) return m.email.trim();
+  return "GRID_USER";
 }
 
-function sanitiseOriginalUri(originalUri: string | undefined, fallbackUri: string) {
-  if (!originalUri) {
-    return fallbackUri;
-  }
-
+function sanitiseReturnUri(raw: string | undefined, fallback: string): string {
+  if (!raw) return fallback;
   try {
-    const candidate = new URL(originalUri);
-    const fallback = new URL(fallbackUri);
-
-    if (candidate.origin === fallback.origin) {
-      return candidate.toString();
-    }
+    const candidate = new URL(raw);
+    const base = new URL(fallback);
+    return candidate.origin === base.origin ? candidate.toString() : fallback;
   } catch {
-    return fallbackUri;
+    return fallback;
   }
-
-  return fallbackUri;
 }
 
-export async function startLoginFlow(originalUri?: string) {
+// ─── Login flow ───────────────────────────────────────────────────────────────
+
+export async function startLoginFlow(returnTo?: string) {
   const env = getEnv();
   const redirectUri = new URL("/auth/callback", env.APP_URL).toString();
-  const wixClient = createHeadlessWixClient();
-  const oauthData = wixClient.auth.generateOAuthData(
+  const client = createHeadlessWixClient();
+
+  const oauthData = client.auth.generateOAuthData(
     redirectUri,
-    sanitiseOriginalUri(originalUri, env.APP_URL)
+    sanitiseReturnUri(returnTo, env.APP_URL)
   );
-  const { authUrl } = await wixClient.auth.getAuthUrl(oauthData, {
+
+  const { authUrl } = await client.auth.getAuthUrl(oauthData, {
     prompt: "login",
-    responseMode: "fragment"
+    responseMode: "fragment",
   });
 
   return {
-    redirectUrl: authUrl,
-    oauthState: createOauthStateRecord(oauthData) satisfies GridOAuthState
+    redirectUrl:  authUrl,
+    oauthState:   createOauthStateRecord(oauthData) satisfies GridOAuthState,
   };
 }
+
+// ─── Code exchange ────────────────────────────────────────────────────────────
 
 export async function exchangeCodeForSession(input: {
   code: string;
   state: string;
   oauthState: GridOAuthState | null;
-}) {
+}): Promise<GridSession> {
   if (!input.oauthState || input.oauthState.state !== input.state) {
-    throw new AppError("Sign-in state is invalid or expired. Start login again.", 401);
+    throw new AppError("OAuth state mismatch or expired. Please restart login.", 401);
   }
 
-  const wixClient = createHeadlessWixClient();
-  const tokens = await wixClient.auth.getMemberTokens(
+  const client = createHeadlessWixClient();
+  const tokens = await client.auth.getMemberTokens(
     input.code,
     input.state,
     toOauthData(input.oauthState)
   );
+
   const member = await getAuthenticatedMember(tokens);
 
   return {
-    memberId: member.memberId,
+    memberId:  member.memberId,
     contactId: member.contactId,
-    email: member.email,
-    username: resolveUsername(member),
+    email:     member.email,
+    username:  resolveUsername(member),
     ...tokensToSessionFields(tokens),
-    createdAt: new Date().toISOString()
-  } satisfies GridSession;
+    createdAt: new Date().toISOString(),
+  };
 }
 
-export async function refreshSessionIfNeeded(session: GridSession) {
-  const expiresAt = new Date(session.accessTokenExpiresAt).getTime();
-  const fiveMinutesFromNow = Date.now() + 5 * 60 * 1000;
+// ─── Token refresh ────────────────────────────────────────────────────────────
 
-  if (expiresAt > fiveMinutesFromNow) {
-    return {
-      session,
-      refreshed: false
-    };
+export async function refreshSessionIfNeeded(
+  session: GridSession
+): Promise<{ session: GridSession; refreshed: boolean }> {
+  const expiresAt = new Date(session.accessTokenExpiresAt).getTime();
+  const fiveMinutesMs = 5 * 60 * 1000;
+
+  if (expiresAt > Date.now() + fiveMinutesMs) {
+    return { session, refreshed: false };
   }
 
   const sdkTokens = sessionToSdkTokens(session);
-  const wixClient = createHeadlessWixClient(sdkTokens);
-  const refreshedTokens = await wixClient.auth.renewToken({
+  const client = createHeadlessWixClient(sdkTokens);
+
+  const refreshed = await client.auth.renewToken({
     value: session.refreshToken,
-    role: sdkTokens.refreshToken.role
+    role: sdkTokens.refreshToken.role,
   });
 
   return {
     refreshed: true,
     session: {
       ...session,
-      ...tokensToSessionFields(refreshedTokens)
-    } satisfies GridSession
+      ...tokensToSessionFields(refreshed),
+    },
   };
 }
