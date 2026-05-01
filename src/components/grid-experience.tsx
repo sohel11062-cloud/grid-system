@@ -95,8 +95,8 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
         <motion.section {...fadeUp(0)} className="panel-shell flex flex-col justify-between p-8 md:p-10">
           <div>
             <div className="flex flex-wrap gap-3">
-              <span className="data-chip">WIX HEADLESS AUTH</span>
-              <span className="data-chip">LOYALTY OPERATING SYSTEM</span>
+              <span className="data-chip">VIBE IDENTITY CORE</span>
+              <span className="data-chip">THE VIBE CANVAS — GRID OS</span>
             </div>
 
             <h1
@@ -112,7 +112,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               {[
-                { lbl: "ACCESS",   title: "Member Vault",   desc: "OAuth entry through Wix Headless." },
+                { lbl: "ACCESS",   title: "Member Vault",   desc: "Secure identity gateway powered by The Grid." },
                 { lbl: "LEDGER",   title: "Cred Engine",    desc: "Spend, bonuses, tiers, sync and redemption." },
                 { lbl: "SECURITY", title: "Backend Locked", desc: "Admin keys never leave the server boundary." },
               ].map((c) => (
@@ -125,9 +125,9 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
             </div>
 
             <p className="mt-8 max-w-2xl text-base leading-7 text-grid-muted">
-              A high-signal rewards cockpit for fashion-tech members. Sign in with your Wix
-              identity to unlock purchase-linked Creds, birthday boosts, dynamic tier elevation,
-              and coupon redemptions orchestrated through the secure backend.
+              A high-signal rewards cockpit for fashion-tech members. Sign in to access your Grid
+              identity and rewards Creds, birthday boosts, dynamic tier elevation,
+              and coupon redemptions orchestrated through the secure portal.
             </p>
           </div>
 
@@ -175,7 +175,11 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
                 <span className="status-dot-online" />
               </div>
               <p className="mt-2 text-sm leading-7">
-                THE_GLITCH → NETRUNNER → SYS-ADMIN → THE_ARCHITECT → THE_SINGULARITY
+                → THE_GLITCH 💀
+                → NETRUNNER 👁️
+                → SYS-ADMIN 🔐
+                → THE_ARCHITECT ✡️
+                → THE_SINGULARITY ♾️
               </p>
             </div>
           </div>
