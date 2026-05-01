@@ -339,23 +339,21 @@ export async function createMoneyOffCoupon(input: {
   });
 
   // No automatic retry here — duplicate codes are handled in coupon-service.ts
-  const res = await wixRequest<WixCouponCreateResponse>(
-    env.WIX_COUPONS_ENDPOINT,
-    { method: "POST", bodyJson: payload }
+const res = await wixRequest<WixCouponCreateResponse>(
+  env.WIX_COUPONS_ENDPOINT,
+  { method: "POST", bodyJson: payload }
+);
+
+console.info("[THE_GRID_COUPON_RESPONSE_ID]", res?.id ?? "MISSING");
+
+const couponId = res?.id ?? res?.coupon?.id;
+
+if (!couponId) {
+  throw new AppError(
+    "Wix coupon API returned 200 but no coupon id.",
+    500,
+    ErrorCode.COUPON_CREATE_FAILED
   );
-
-  console.info("[THE_GRID_COUPON_RESPONSE_ID]", res.coupon?.id ?? "MISSING");
-
-  if (!res.coupon?.id) {
-    throw new AppError(
-      "Wix coupon API returned 200 but no coupon.id. " +
-      "Verify: (1) API key has Manage Coupons permission, " +
-      "(2) Wix Store is installed, " +
-      "(3) WIX_COUPONS_ENDPOINT = https://www.wixapis.com/stores/v2/coupons",
-      500,
-      ErrorCode.COUPON_CREATE_FAILED
-    );
-  }
-
-  return res;
 }
+
+return { id: couponId };
