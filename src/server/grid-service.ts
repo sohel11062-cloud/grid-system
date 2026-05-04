@@ -6,13 +6,16 @@ import {
   getGridTier,
   normaliseAmount,
   rupeesToCreds,
+  type CreditTransaction,
   type GridCouponRecord,
   type GridDashboardData,
   type GridMemberLedger,
   type GridOrderSummary,
+  type LifetimeStats,
 } from "@/lib/grid";
 import { getEnv } from "@/server/env";
 import { AppError, ErrorCode } from "@/server/errors";
+import { ledgerService } from "@/server/ledger-service";
 import { getRepository } from "@/server/storage/repository";
 import {
   getContactById,
@@ -24,37 +27,22 @@ import {
   type WixOrder,
 } from "@/server/wix";
 
-// ─── Per-member sync lock (prevents concurrent syncs for same member) ─────────
-//
-// Uses promise chaining so concurrent calls for the same memberId queue up
-// and execute sequentially. Each call waits for the previous to complete
-// before starting, which prevents partial writes and duplicate-work.
+// ─── Per-member sync lock ─────────────────────────────────────────────────────
 
 class AsyncLockMap {
-  // memberId → tail of the promise chain
   private readonly locks = new Map<string, Promise<unknown>>();
 
   async run<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    // Chain onto whatever is currently running for this key
     const prev = this.locks.get(key) ?? Promise.resolve(null);
-
     let resolveLock!: () => void;
-    // This promise represents the "slot" this call holds in the queue
     const slot = new Promise<void>((r) => { resolveLock = r; });
-
-    // Register our slot as the new tail
     this.locks.set(key, slot);
-
     try {
-      // Wait for the previous operation to finish (or fail — we don't care)
       await prev.catch(() => {});
       return await fn();
     } finally {
       resolveLock();
-      // Clean up if we're still the tail (no one queued behind us)
-      if (this.locks.get(key) === slot) {
-        this.locks.delete(key);
-      }
+      if (this.locks.get(key) === slot) this.locks.delete(key);
     }
   }
 }
@@ -63,11 +51,8 @@ declare global {
   // eslint-disable-next-line no-var
   var __GRID_SYNC_LOCK__: AsyncLockMap | undefined;
 }
-
 function getSyncLock(): AsyncLockMap {
-  if (!global.__GRID_SYNC_LOCK__) {
-    global.__GRID_SYNC_LOCK__ = new AsyncLockMap();
-  }
+  if (!global.__GRID_SYNC_LOCK__) global.__GRID_SYNC_LOCK__ = new AsyncLockMap();
   return global.__GRID_SYNC_LOCK__;
 }
 
@@ -87,48 +72,29 @@ function birthdayMMDD(contact: WixContact | null): string | null {
   return mm && dd ? `${mm}-${dd}` : null;
 }
 
-/**
- * Priority: nickname → member name → CRM name → email → "GRID_USER"
- * Trims whitespace at every level to avoid " " matching as truthy.
- */
 function resolveUsername(member: WixMember, contact: WixContact | null): string {
-  const nickname = member.profile?.nickname?.trim();
-  if (nickname) return nickname;
+  const nick = member.profile?.nickname?.trim();
+  if (nick) return nick;
 
-  const mFirst = member.contact?.firstName?.trim() ?? "";
-  const mLast  = member.contact?.lastName?.trim()  ?? "";
-  const mFull  = [mFirst, mLast].filter(Boolean).join(" ");
+  const mFull = [member.contact?.firstName, member.contact?.lastName]
+    .map((s) => s?.trim() ?? "").filter(Boolean).join(" ");
   if (mFull) return mFull;
 
-  const cFirst = contact?.info?.name?.first?.trim() ?? "";
-  const cLast  = contact?.info?.name?.last?.trim()  ?? "";
-  const cFull  = [cFirst, cLast].filter(Boolean).join(" ");
+  const cFull = [contact?.info?.name?.first, contact?.info?.name?.last]
+    .map((s) => s?.trim() ?? "").filter(Boolean).join(" ");
   if (cFull) return cFull;
 
-  const email = member.loginEmail?.trim();
-  if (email) return email;
-
-  return "GRID_USER";
+  return member.loginEmail?.trim() || "GRID_USER";
 }
 
-/** Orders that should count toward purchase Creds */
 function isEligibleOrder(order: WixOrder): boolean {
-  const status  = (order.status        ?? "").toUpperCase();
-  const payment = (order.paymentStatus ?? "").toUpperCase();
-
-  if (["CANCELED", "INITIALIZED", "CHECKOUT_INITIATED", "DECLINED"].includes(status)) {
-    return false;
-  }
-  if (["NOT_PAID", "UNPAID", "AWAITING_PAYMENT"].includes(payment)) {
-    return false;
-  }
+  const st = (order.status        ?? "").toUpperCase();
+  const ps = (order.paymentStatus ?? "").toUpperCase();
+  if (["CANCELED", "INITIALIZED", "CHECKOUT_INITIATED", "DECLINED"].includes(st)) return false;
+  if (["NOT_PAID", "UNPAID", "AWAITING_PAYMENT"].includes(ps)) return false;
   return true;
 }
 
-/**
- * Extract order total with multiple fallback paths.
- * Wix returns amounts as strings "1500.00" in some API versions.
- */
 function extractOrderTotal(order: WixOrder): number {
   const candidates = [
     order.priceSummary?.total?.amount,
@@ -136,20 +102,18 @@ function extractOrderTotal(order: WixOrder): number {
     order.priceSummary?.subtotal?.amount,
     order.totals?.total,
   ];
-
   for (const v of candidates) {
     if (v === undefined || v === null) continue;
     const n = normaliseAmount(v);
     if (n > 0) return n;
   }
-
   return 0;
 }
 
 function toOrderSummary(order: WixOrder): GridOrderSummary {
   return {
     id:            order.id,
-    number:        order.number ?? order.id,
+    number:        order.number    ?? order.id,
     total:         extractOrderTotal(order),
     currency:      order.priceSummary?.total?.currency ?? "INR",
     purchasedDate: order.purchasedDate ?? null,
@@ -159,6 +123,7 @@ function toOrderSummary(order: WixOrder): GridOrderSummary {
       order.lineItems
         ?.map((i) => i.productName?.original)
         .filter((n): n is string => Boolean(n)) ?? [],
+    couponCode: order.appliedCoupon?.code, // NEW
   };
 }
 
@@ -167,18 +132,30 @@ function isStale(ledger: GridMemberLedger): boolean {
   return Date.now() - new Date(ledger.syncedAt).getTime() > SYNC_STALE_HOURS * 3_600_000;
 }
 
+function buildLifetimeStats(coupons: GridCouponRecord[]): LifetimeStats {
+  // Expire check at display time (belt-and-suspenders against stale status)
+  const now = new Date().toISOString();
+  return {
+    totalSavingsRupees:  coupons.filter((c) => c.status === "USED").reduce((s, c) => s + c.valueRupees, 0),
+    totalCouponsUsed:    coupons.filter((c) => c.status === "USED").length,
+    totalCouponsActive:  coupons.filter((c) => c.status === "ACTIVE" && (!c.expiresAt || c.expiresAt > now)).length,
+    totalCouponsExpired: coupons.filter((c) => c.status === "EXPIRED" || (c.status === "ACTIVE" && !!c.expiresAt && c.expiresAt <= now)).length,
+  };
+}
+
 function buildDashboard(
-  ledger:      GridMemberLedger,
-  coupons:     GridCouponRecord[],
-  leaderboard: GridMemberLedger extends infer _
-    ? Awaited<ReturnType<ReturnType<typeof getRepository>["listTopMembers"]>>
-    : never
+  ledger:       GridMemberLedger,
+  coupons:      GridCouponRecord[],
+  leaderboard:  GridLeaderboardEntry[],
+  transactions: CreditTransaction[]
 ): GridDashboardData {
+  type GridLeaderboardEntry = Awaited<ReturnType<ReturnType<typeof getRepository>["listTopMembers"]>>[number];
+
   const tier     = getGridTier(ledger.lifetimeCreds);
   const progress = getGridProgress(ledger.lifetimeCreds);
-  const nextTier = progress.remaining > 0
-    ? getGridTier(ledger.lifetimeCreds + progress.remaining)
-    : null;
+  const nextTier = progress.remaining > 0 ? getGridTier(ledger.lifetimeCreds + progress.remaining) : null;
+
+  const visibleCoupons = coupons.filter((c) => c.status !== "FAILED");
 
   return {
     member: {
@@ -199,10 +176,11 @@ function buildDashboard(
       progressRatio:      progress.ratio,
       credsToNextLevel:   progress.remaining,
     },
-    orders:      ledger.orders,
-    // Hide FAILED coupons from the UI (kept in DB for audit only)
-    coupons:     coupons.filter((c) => c.status !== "FAILED"),
-    leaderboard,
+    orders:             ledger.orders,
+    coupons:            visibleCoupons,
+    leaderboard:        leaderboard as unknown as GridLeaderboardEntry[],
+    recentTransactions: transactions,
+    lifetimeStats:      buildLifetimeStats(visibleCoupons),
     system: {
       syncWindowLabel: "24-48 hrs",
       syncedAt:        ledger.syncedAt,
@@ -211,77 +189,65 @@ function buildDashboard(
   };
 }
 
-// ─── Core sync (protected by per-member lock) ─────────────────────────────────
+// ─── Core sync (under per-member lock) ───────────────────────────────────────
 
-async function _syncMemberByIdUnsafe(memberId: string): Promise<GridMemberLedger> {
+async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
   const env      = getEnv();
   const repo     = getRepository();
   const existing = await repo.getMemberLedger(memberId);
 
-  // ── Identity ──────────────────────────────────────────────────────────────
+  // ── 1. Identity ────────────────────────────────────────────────────────
   const member = await getMemberById(memberId);
 
   let contact: WixContact | null = null;
   if (member.contactId) {
-    try {
-      contact = await getContactById(member.contactId);
-    } catch {
-      // Contact is enrichment data — non-critical; log and continue
-      console.warn("[THE_GRID_SYNC] Contact fetch failed for", member.contactId);
-    }
+    try { contact = await getContactById(member.contactId); }
+    catch { console.warn("[THE_GRID_SYNC] Contact fetch failed:", member.contactId); }
   }
 
   const email =
-    member.loginEmail?.trim()        ||
-    existing?.email                  ||
-    contact?.primaryInfo?.email      ||
-    "";
+    member.loginEmail?.trim() || existing?.email || contact?.primaryInfo?.email || "";
 
-  // ── Orders ────────────────────────────────────────────────────────────────
-  const rawOrders = await searchOrdersByIdentity({
-    memberId,
-    contactId: member.contactId,
-    email,
-  });
+  // ── 2. Orders — fetch + de-duplicate ──────────────────────────────────
+  const rawOrders = await searchOrdersByIdentity({ memberId, contactId: member.contactId, email });
 
-  // De-duplicate by order ID in case the $or query returns the same order
-  // matched by multiple identity fields (memberId AND email, for example)
   const seenIds = new Set<string>();
-  const uniqueOrders = rawOrders.filter((o) => {
+  const uniqueRaw = rawOrders.filter((o) => {
     if (seenIds.has(o.id)) return false;
     seenIds.add(o.id);
     return true;
   });
 
-  const eligibleOrders     = uniqueOrders.filter(isEligibleOrder).map(toOrderSummary);
+  const eligibleOrders     = uniqueRaw.filter(isEligibleOrder).map(toOrderSummary);
   const totalPurchaseValue = eligibleOrders.reduce((s, o) => s + o.total, 0);
   const purchaseCreds      = rupeesToCreds(totalPurchaseValue);
 
-  // ── Bonus Creds (idempotent) ──────────────────────────────────────────────
-  let bonusCreds            = existing?.bonusCreds            ?? 0;
-  let welcomeBonusGrantedAt = existing?.welcomeBonusGrantedAt ?? null;
-  let birthdayBonusYears    = existing?.birthdayBonusYears    ?? [];
+  // ── 3. Bonus Creds (idempotent) ────────────────────────────────────────
+  let bonusCreds                 = existing?.bonusCreds            ?? 0;
+  let welcomeBonusGrantedAt      = existing?.welcomeBonusGrantedAt ?? null;
+  let birthdayBonusYears         = existing?.birthdayBonusYears    ?? [];
+  let grantedWelcomeThisSync     = false;
+  let grantedBirthdayThisSync    = false;
 
-  // Welcome bonus — exactly once, ever
   if (!welcomeBonusGrantedAt) {
-    welcomeBonusGrantedAt = new Date().toISOString();
-    bonusCreds += env.WELCOME_BONUS_CREDITS;
+    welcomeBonusGrantedAt   = new Date().toISOString();
+    bonusCreds             += env.WELCOME_BONUS_CREDITS;
+    grantedWelcomeThisSync  = true;
   }
 
-  // Birthday bonus — once per calendar year
   const bDay = birthdayMMDD(contact);
   const year = new Date().getUTCFullYear();
   if (bDay && bDay === todayMMDD() && !birthdayBonusYears.includes(year)) {
-    birthdayBonusYears = [...birthdayBonusYears, year];
-    bonusCreds += env.BIRTHDAY_BONUS_CREDITS;
+    birthdayBonusYears          = [...birthdayBonusYears, year];
+    bonusCreds                 += env.BIRTHDAY_BONUS_CREDITS;
+    grantedBirthdayThisSync     = true;
   }
 
-  // ── Totals — invariant: availableCreds = lifetimeCreds - redeemedCreds ────
+  // ── 4. Compute final balance ────────────────────────────────────────────
   const lifetimeCreds  = purchaseCreds + bonusCreds;
-  // Preserve any creds already redeemed; do not reset them during a sync
   const redeemedCreds  = existing?.redeemedCreds ?? 0;
   const availableCreds = Math.max(lifetimeCreds - redeemedCreds, 0);
-  const now = new Date().toISOString();
+  const now            = new Date().toISOString();
 
   const ledger: GridMemberLedger = {
     memberId,
@@ -306,12 +272,69 @@ async function _syncMemberByIdUnsafe(memberId: string): Promise<GridMemberLedger
   };
 
   await repo.upsertMemberLedger(ledger);
+
+  // ── 5. NEW: Process new orders → order_history + EARN transactions ──────
+  const processedIds = await repo.getProcessedOrderIds(memberId);
+
+  // Map rawOrder id → full WixOrder for coupon lookup
+  const rawOrderMap = new Map(uniqueRaw.map((o) => [o.id, o]));
+
+  for (const order of eligibleOrders) {
+    if (processedIds.has(order.id)) continue; // already processed
+
+    const rawOrder    = rawOrderMap.get(order.id);
+    const couponCode  = rawOrder?.appliedCoupon?.code;
+    const credsEarned = rupeesToCreds(order.total); // ₹1 = 1 Cred
+
+    // Save to order_history (unique index on orderId prevents duplicates)
+    await repo.saveOrderHistory({
+      orderId:    order.id,
+      memberId,
+      amount:     order.total,
+      currency:   order.currency,
+      couponCode,
+      credsEarned,
+      createdAt:  order.purchasedDate ?? now,
+      syncedAt:   now,
+    });
+
+    // Record EARN transaction
+    if (credsEarned > 0) {
+      await ledgerService.recordEarnFromOrder(memberId, credsEarned, availableCreds, order.id);
+    }
+
+    // Mark coupon as USED if this order applied one (idempotent)
+    if (couponCode) {
+      const marked = await repo.markCouponUsed(couponCode, order.id, now);
+      if (marked) {
+        console.info("[THE_GRID_SYNC] Coupon marked USED:", { couponCode, orderId: order.id, memberId });
+      }
+    }
+  }
+
+  // ── 6. NEW: Record bonus transactions if granted this sync ─────────────
+  if (grantedWelcomeThisSync) {
+    await ledgerService.recordBonus(
+      memberId, env.WELCOME_BONUS_CREDITS, availableCreds, "WELCOME_BONUS"
+    );
+  }
+  if (grantedBirthdayThisSync) {
+    await ledgerService.recordBonus(
+      memberId, env.BIRTHDAY_BONUS_CREDITS, availableCreds, `BIRTHDAY_${year}`
+    );
+  }
+
+  // ── 7. NEW: Expire stale coupons ────────────────────────────────────────
+  const expired = await repo.expireStaleCoupons(memberId, now);
+  if (expired > 0) {
+    console.info(`[THE_GRID_SYNC] Expired ${expired} coupon(s) for member ${memberId}`);
+  }
+
   return ledger;
 }
 
-/** Public sync — acquires per-member lock to prevent concurrent partial writes */
 export async function syncMemberById(memberId: string): Promise<GridMemberLedger> {
-  return getSyncLock().run(memberId, () => _syncMemberByIdUnsafe(memberId));
+  return getSyncLock().run(memberId, () => _syncUnsafe(memberId));
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -327,12 +350,13 @@ export async function getDashboardForMember(
     ledger = await syncMemberById(memberId);
   }
 
-  const [coupons, leaderboard] = await Promise.all([
+  const [coupons, leaderboard, transactions] = await Promise.all([
     repo.listCouponsByMember(memberId, 8),
     repo.listTopMembers(5),
+    repo.listCreditTransactions(memberId, { limit: 10 }), // last 10 for dashboard
   ]);
 
-  return buildDashboard(ledger, coupons, leaderboard);
+  return buildDashboard(ledger, coupons, leaderboard as never, transactions);
 }
 
 export async function syncAllMembers(): Promise<{
@@ -349,9 +373,7 @@ export async function syncAllMembers(): Promise<{
       synced++;
     } catch (e) {
       failed++;
-      console.error("[THE_GRID_BULK_SYNC_FAILED]", m.id,
-        e instanceof Error ? e.message : e
-      );
+      console.error("[THE_GRID_BULK_SYNC_FAILED]", m.id, e instanceof Error ? e.message : e);
     }
   }
 
@@ -362,10 +384,13 @@ export async function assertLedgerExists(memberId: string): Promise<GridMemberLe
   const ledger = await getRepository().getMemberLedger(memberId);
   if (!ledger) {
     throw new AppError(
-      "No loyalty ledger found. Please trigger a sync first.",
+      "No loyalty ledger found. Trigger a sync first.",
       404,
       ErrorCode.LEDGER_NOT_FOUND
     );
   }
   return ledger;
 }
+
+// Explicit re-export for type inference in buildDashboard
+type GridLeaderboardEntry = import("@/lib/grid").GridLeaderboardEntry;

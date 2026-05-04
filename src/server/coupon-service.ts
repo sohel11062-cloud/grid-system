@@ -2,12 +2,12 @@ import "server-only";
 
 import { credsToRupees, type GridCouponRecord } from "@/lib/grid";
 import { AppError, ErrorCode } from "@/server/errors";
+import { ledgerService } from "@/server/ledger-service";
 import { createCouponCode } from "@/server/security";
 import { assertLedgerExists, getDashboardForMember } from "@/server/grid-service";
 import { getRepository } from "@/server/storage/repository";
 import { createMoneyOffCoupon, isDuplicateCodeError } from "@/server/wix";
 
-/** Maximum attempts to generate a unique coupon code */
 const MAX_CODE_ATTEMPTS = 3;
 
 export async function redeemMemberCreds(
@@ -20,144 +20,107 @@ export async function redeemMemberCreds(
 
   // ── 1. Input validation ────────────────────────────────────────────────────
   if (!Number.isFinite(creds) || creds <= 0) {
-    throw new AppError(
-      "Cred amount must be a positive number.",
-      400,
-      ErrorCode.VALIDATION_ERROR
-    );
+    throw new AppError("Cred amount must be a positive number.", 400, ErrorCode.VALIDATION_ERROR);
   }
   if (creds % 100 !== 0) {
-    throw new AppError(
-      "Redemptions must be in multiples of 100 Creds.",
-      400,
-      ErrorCode.VALIDATION_ERROR
-    );
+    throw new AppError("Redemptions must be in multiples of 100 Creds.", 400, ErrorCode.VALIDATION_ERROR);
   }
 
-  // ── 2. Ledger existence + soft balance pre-check ───────────────────────────
-  // (Fail fast to avoid unnecessary Wix API calls. The hard atomic check is
-  //  performed later against the DB, so this is safe even if stale.)
-  const repo   = getRepository();
-  const ledger = await assertLedgerExists(memberId);
+  const repo    = getRepository();
+  const ledger  = await assertLedgerExists(memberId);
 
+  // ── 2. Soft balance pre-check ──────────────────────────────────────────────
   if (ledger.availableCreds < creds) {
     throw new AppError(
-      `Insufficient balance. Available: ${ledger.availableCreds} Creds, requested: ${creds}.`,
+      `Insufficient balance. Available: ${ledger.availableCreds}, requested: ${creds}.`,
       400,
       ErrorCode.INSUFFICIENT_BALANCE
     );
   }
 
-  // ── 3. Derive coupon value ─────────────────────────────────────────────────
-  const valueRupees = credsToRupees(creds); // e.g. 1000 creds → ₹10.00
-  // Ensure integer rupee amount (Wix requires integer moneyOffAmount)
-  const rupeeInt = Math.floor(valueRupees);
+  const valueRupees = credsToRupees(creds);
+  const rupeeInt    = Math.floor(valueRupees); // Wix requires integer
 
   if (rupeeInt <= 0) {
-    throw new AppError(
-      "Coupon value must be at least ₹1.",
-      400,
-      ErrorCode.VALIDATION_ERROR
-    );
+    throw new AppError("Coupon value must be at least ₹1.", 400, ErrorCode.VALIDATION_ERROR);
   }
 
-  const now = new Date().toISOString();
+  // ── 3. Idempotency: prevent duplicate REDEEM transactions ─────────────────
+  // (In case the client retries after a timeout mid-request)
+  // We use a pre-generated idempotency key (the coupon code) later.
 
-  // ── 4. Create Wix coupon — retry on duplicate code (up to MAX_CODE_ATTEMPTS) ─
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(); // 1 year
+
+  // ── 4. Create Wix coupon (retry on duplicate code) ─────────────────────────
   let wixCouponId: string | undefined;
   let finalCode:   string | undefined;
-  let lastCouponError: unknown;
+  let lastError:   unknown;
 
   for (let attempt = 1; attempt <= MAX_CODE_ATTEMPTS; attempt++) {
     const code = createCouponCode();
-
     try {
       const wixRes = await createMoneyOffCoupon({ code, amount: rupeeInt });
-      wixCouponId = wixRes.id;
+      wixCouponId  = wixRes.coupon!.id!;
       finalCode    = code;
-      break; // success
+      break;
     } catch (err) {
-      lastCouponError = err;
-
+      lastError = err;
       if (isDuplicateCodeError(err) && attempt < MAX_CODE_ATTEMPTS) {
-        console.warn(
-          `[THE_GRID_COUPON] Duplicate code "${code}" on attempt ${attempt} — regenerating`
-        );
-        continue; // try a new code
+        console.warn(`[THE_GRID_COUPON] Duplicate code on attempt ${attempt} — regenerating`);
+        continue;
       }
-
-      // Non-duplicate error OR exhausted attempts → give up
       break;
     }
   }
 
   if (!wixCouponId || !finalCode) {
-    // Coupon creation failed — save a FAILED record with ZERO cred deduction
-    const failedRecord: GridCouponRecord = {
+    // Save FAILED record for audit — zero cred deduction
+    const failedCoupon: GridCouponRecord = {
       id:          crypto.randomUUID(),
       memberId:    ledger.memberId,
       contactId:   ledger.contactId,
       email:       ledger.email,
-      code:        finalCode ?? createCouponCode(), // use last attempted code
+      code:        finalCode ?? createCouponCode(),
       valueRupees: rupeeInt,
       credsSpent:  creds,
       status:      "FAILED",
       createdAt:   now,
+      expiresAt,
       note:
-        lastCouponError instanceof AppError
-          ? lastCouponError.message
-          : "Wix coupon creation failed. No Creds were deducted.",
+        lastError instanceof AppError
+          ? lastError.message
+          : "Wix coupon creation failed. No Creds deducted.",
     };
 
-    // Best-effort save for audit
-    try {
-      await repo.saveCoupon(failedRecord);
-    } catch (saveErr) {
-      console.error("[THE_GRID_FAILED_COUPON_SAVE_ERROR]", saveErr);
-    }
+    try { await repo.saveCoupon(failedCoupon); }
+    catch (e) { console.error("[THE_GRID_FAILED_COUPON_SAVE]", e); }
 
-    console.error("[THE_GRID_COUPON_FAILED]", {
-      memberId,
-      attempts: MAX_CODE_ATTEMPTS,
-      error:    lastCouponError,
-    });
+    console.error("[THE_GRID_COUPON_FAILED]", { memberId, attempts: MAX_CODE_ATTEMPTS, error: lastError });
 
-    const userMessage =
-      lastCouponError instanceof AppError
-        ? lastCouponError.message
-        : "Coupon creation failed — your Creds were NOT deducted. " +
-          "Please verify Wix Store is installed and API key has 'Manage Coupons' permission.";
-
-    throw new AppError(userMessage, 502, ErrorCode.COUPON_CREATE_FAILED);
+    throw new AppError(
+      lastError instanceof AppError
+        ? lastError.message
+        : "Coupon creation failed — your Creds were NOT deducted.",
+      502,
+      ErrorCode.COUPON_CREATE_FAILED
+    );
   }
 
   // ── 5. ATOMIC cred deduction ───────────────────────────────────────────────
-  //
-  // Uses a conditional DB update: only succeeds when availableCreds >= creds
-  // at write time. This prevents double-deduction from concurrent requests.
-  //
-  // If this returns null it means another concurrent request already reduced
-  // the balance between our pre-check (step 2) and now. The Wix coupon already
-  // exists — we log the discrepancy but don't deduct (the coupon is effectively
-  // a goodwill coupon for this rare race-condition case).
   const updatedLedger = await repo.atomicRedemption(memberId, creds, now);
 
   if (!updatedLedger) {
-    console.error("[THE_GRID_CRITICAL_RACE_CONDITION]", {
-      memberId,
-      creds,
-      wixCouponId,
-      message:
-        "Wix coupon was created but atomic deduction failed (concurrent request). " +
-        "Coupon exists in Wix without cred deduction.",
+    // Race condition: balance changed between pre-check and atomic update
+    console.error("[THE_GRID_RACE_CONDITION]", {
+      memberId, creds, wixCouponId,
+      message: "Wix coupon created but atomic deduction failed.",
     });
-
     throw new AppError(
-      "A concurrent redemption was detected and your request could not be completed safely. " +
-      "Your Creds were NOT deducted. Please try again.",
+      "A concurrent request was detected. Your Creds were NOT deducted. Please try again.",
       409,
       ErrorCode.CONCURRENT_REDEMPTION,
-      { wixCouponId } // include so support can look it up if needed
+      { wixCouponId }
     );
   }
 
@@ -172,10 +135,21 @@ export async function redeemMemberCreds(
     credsSpent:  creds,
     status:      "ACTIVE",
     createdAt:   now,
+    expiresAt,
     wixCouponId,
   };
 
   await repo.saveCoupon(coupon);
+
+  // ── 7. Record REDEEM transaction ───────────────────────────────────────────
+  // Uses finalCode as referenceId — duplicate index prevents double recording
+  await ledgerService.recordRedemption(
+    memberId,
+    creds,
+    updatedLedger.availableCreds,
+    finalCode,
+    wixCouponId
+  );
 
   console.info("[THE_GRID_REDEMPTION_SUCCESS]", {
     memberId,

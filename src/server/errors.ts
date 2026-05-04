@@ -1,10 +1,10 @@
-// Error codes for structured client-side handling
 export const ErrorCode = {
   AUTH_REQUIRED:          "AUTH_REQUIRED",
   SESSION_EXPIRED:        "SESSION_EXPIRED",
   VALIDATION_ERROR:       "VALIDATION_ERROR",
   INSUFFICIENT_BALANCE:   "INSUFFICIENT_BALANCE",
   COUPON_CREATE_FAILED:   "COUPON_CREATE_FAILED",
+  COUPON_ALREADY_USED:    "COUPON_ALREADY_USED",   // NEW
   CONCURRENT_REDEMPTION:  "CONCURRENT_REDEMPTION",
   RATE_LIMITED:           "RATE_LIMITED",
   LEDGER_NOT_FOUND:       "LEDGER_NOT_FOUND",
@@ -38,11 +38,7 @@ export class AppError extends Error {
 
 export function toAppError(error: unknown): AppError {
   if (error instanceof AppError) return error;
-  if (error instanceof Error) {
-    return new AppError(error.message, 500, ErrorCode.INTERNAL_ERROR);
-  }
-  if (typeof error === "string") {
-    return new AppError(error, 500, ErrorCode.INTERNAL_ERROR);
-  }
+  if (error instanceof Error)   return new AppError(error.message, 500, ErrorCode.INTERNAL_ERROR);
+  if (typeof error === "string") return new AppError(error, 500, ErrorCode.INTERNAL_ERROR);
   return new AppError("An unexpected error occurred.", 500, ErrorCode.INTERNAL_ERROR);
 }

@@ -3,10 +3,15 @@
     {
       "path": "/api/cron/sync",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/reports/weekly",
+      "schedule": "0 0 * * 0"
     }
   ],
   "functions": {
     "src/app/api/**/*.ts": {
+      "runtime": "nodejs18.x",
       "maxDuration": 30
     }
   }
