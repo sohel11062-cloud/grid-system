@@ -303,7 +303,13 @@ export async function createMoneyOffCoupon(input: {
     { method: "POST", bodyJson: payload }
   );
 
-  console.info("[THE_GRID_COUPON_RESPONSE_ID]", res.coupon?.id ?? "MISSING");
+  console.info(
+
+  "🔥 FULL WIX RESPONSE >>>",
+
+  JSON.stringify(res, null, 2)
+
+);
 
   if (!res.coupon?.id) {
     throw new AppError(
