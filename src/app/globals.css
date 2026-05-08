@@ -1,132 +1,220 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Design tokens ──────────────────────────────────────────────────────── */
+/* ─── Base ─────────────────────────────────────────────────────────────────── */
+
 :root {
-  color-scheme: dark;
-  --font-display: "Eurostile", "Avenir Next Condensed", "Arial Narrow", sans-serif;
-  --font-body: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
-  --c-cyan:    #4df7ff;
-  --c-magenta: #ff4fd8;
-  --c-blue:    #2c8bff;
-  --c-violet:  #8b5cf6;
+  --grid-bg:      #04050a;
+  --grid-panel:   rgba(8,10,20,0.82);
+  --grid-cyan:    #4df7ff;
+  --grid-blue:    #3b82f6;
+  --grid-violet:  #a78bfa;
+  --grid-ember:   #f97316;
+  --grid-magenta: #e879f9;
+  --grid-text:    #e2e8f0;
+  --grid-muted:   #64748b;
 }
 
-html { scroll-behavior: smooth; }
-
-/* ─── Base body ──────────────────────────────────────────────────────────── */
-body {
-  font-family: var(--font-body), sans-serif;
-  background-color: #04060d;
-  background-image:
-    radial-gradient(ellipse 60% 40% at 22% 12%, rgba(77,247,255,0.09), transparent),
-    radial-gradient(ellipse 50% 35% at 80% 15%, rgba(255,79,216,0.09), transparent),
-    radial-gradient(ellipse 60% 45% at 50% 98%, rgba(44,139,255,0.11), transparent),
-    radial-gradient(ellipse 40% 30% at  8% 80%, rgba(139,92,246,0.06), transparent),
-    linear-gradient(180deg, rgba(3,5,13,0.97), #04060d);
+* {
+  box-sizing: border-box;
 }
 
-/* Grid overlay */
-body::before {
-  content: "";
-  position: fixed; inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(77,247,255,0.032) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(77,247,255,0.032) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: linear-gradient(180deg, rgba(255,255,255,0.25), transparent 75%);
-  z-index: 0;
+html, body {
+  background: var(--grid-bg);
+  color:      var(--grid-text);
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+  overscroll-behavior: none;
 }
 
-/* Vignette */
-body::after {
-  content: "";
-  position: fixed; inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse at center, transparent 42%, rgba(0,0,0,0.55) 100%);
-  z-index: 0;
+::selection {
+  background: rgba(77, 247, 255, 0.22);
+  color: #fff;
 }
 
-h1,h2,h3,h4,h5,h6 {
-  font-family: var(--font-display), sans-serif;
-  letter-spacing: 0.08em;
-}
-
-::selection { background: rgba(77,247,255,0.22); color: #f0ffff; }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 7px; }
-::-webkit-scrollbar-track { background: rgba(4,6,13,0.95); }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(77,247,255,0.45), rgba(255,79,216,0.45));
-  border-radius: 999px;
-  border: 2px solid rgba(4,6,13,0.6);
+  background: rgba(77, 247, 255, 0.28);
+  border-radius: 4px;
 }
 
-/* ─── Noise + scanlines ───────────────────────────────────────────────────── */
-@keyframes noiseDrift {
-  0%   { transform: translate3d(0,0,0); }
-  50%  { transform: translate3d(-1.5%,1%,0); }
-  100% { transform: translate3d(1%,-1%,0); }
-}
-@keyframes scanPulse {
-  0%,100% { opacity: 0.18; }
-  50%     { opacity: 0.28; }
+/* ─── Panel shell ──────────────────────────────────────────────────────────── */
+
+.panel-shell {
+  @apply relative rounded-[28px] border border-white/10 bg-[rgba(8,10,20,0.82)] p-6 backdrop-blur-xl;
+  box-shadow:
+    0 0 0 1px rgba(77,247,255,0.06),
+    0 24px 64px rgba(0,0,0,0.55),
+    inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
-.grid-noise {
-  background-image:
-    radial-gradient(circle at 22% 22%, rgba(255,255,255,0.09) 0 0.8px, transparent 1px),
-    radial-gradient(circle at 70% 45%, rgba(255,255,255,0.06) 0 0.8px, transparent 1px),
-    radial-gradient(circle at 40% 75%, rgba(255,255,255,0.05) 0 0.9px, transparent 1px);
-  background-size: 9px 9px, 12px 12px, 14px 14px;
+/* ─── Corner decorators ─────────────────────────────────────────────────────  */
+
+.panel-shell::before,
+.panel-shell::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: rgba(77,247,255,0.35);
+  border-style: solid;
+}
+
+.panel-shell::before {
+  top: 8px; left: 8px;
+  border-width: 1.5px 0 0 1.5px;
+  border-radius: 2px 0 0 0;
+}
+
+.panel-shell::after {
+  bottom: 8px; right: 8px;
+  border-width: 0 1.5px 1.5px 0;
+  border-radius: 0 0 2px 0;
+}
+
+/* ─── Typography ────────────────────────────────────────────────────────────  */
+
+.panel-title {
+  @apply text-[10px] uppercase tracking-[0.38em] text-grid-cyan/70;
+}
+
+.panel-kicker {
+  @apply text-[9px] uppercase tracking-[0.42em] text-grid-muted;
+}
+
+/* ─── Data chip ─────────────────────────────────────────────────────────────  */
+
+.data-chip {
+  @apply inline-flex items-center rounded-full border border-white/10 bg-white/5
+         px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-grid-muted;
+}
+
+/* ─── Buttons ───────────────────────────────────────────────────────────────  */
+
+.grid-button {
+  @apply relative overflow-hidden rounded-full border border-grid-cyan/40
+         bg-gradient-to-r from-grid-cyan/15 to-grid-blue/15
+         px-6 py-3 text-xs font-semibold uppercase tracking-[0.32em]
+         text-white transition-all duration-200
+         hover:border-grid-cyan/70 hover:from-grid-cyan/25 hover:to-grid-blue/25
+         disabled:cursor-not-allowed disabled:opacity-40;
+}
+
+.grid-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--x,50%) var(--y,50%), rgba(77,247,255,0.18) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.grid-button:hover::after { opacity: 1; }
+
+.grid-button-ghost {
+  @apply rounded-full border border-white/15 bg-white/5
+         px-5 py-2.5 text-xs font-medium uppercase tracking-[0.28em]
+         text-grid-muted transition-all duration-200
+         hover:border-white/30 hover:bg-white/10 hover:text-white
+         disabled:cursor-not-allowed disabled:opacity-40;
+}
+
+/* ─── Input ─────────────────────────────────────────────────────────────────  */
+
+.grid-input {
+  @apply w-full rounded-2xl border border-white/15 bg-black/20
+         px-4 py-3 text-sm text-white outline-none
+         placeholder:text-grid-muted
+         focus:border-grid-cyan/50 focus:ring-1 focus:ring-grid-cyan/20
+         transition-all duration-200;
+}
+
+/* ─── Progress bar ──────────────────────────────────────────────────────────  */
+
+.progress-track {
+  @apply relative h-1.5 w-full overflow-hidden rounded-full bg-white/10;
+}
+
+.progress-fill {
+  @apply absolute inset-y-0 left-0 rounded-full
+         bg-gradient-to-r from-grid-cyan/80 via-grid-blue/80 to-grid-violet/80;
+  animation: progressGlow 2s ease-in-out infinite;
+}
+
+.progress-orb {
+  @apply absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 translate-x-1/2
+         rounded-full bg-grid-cyan shadow-[0_0_12px_#4df7ff];
+}
+
+/* ─── Status dots ───────────────────────────────────────────────────────────  */
+
+.status-dot-online {
+  @apply h-2 w-2 rounded-full bg-emerald-400;
+  animation: statusPulse 2s ease-in-out infinite;
+  box-shadow: 0 0 6px #34d399;
+}
+
+.status-dot-syncing {
+  @apply h-2 w-2 rounded-full bg-amber-400;
+  animation: statusPulse 1s ease-in-out infinite;
+  box-shadow: 0 0 6px #fbbf24;
+}
+
+.status-dot-degraded {
+  @apply h-2 w-2 rounded-full bg-red-400;
+  animation: statusPulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 6px #f87171;
+}
+
+/* ─── Glitch text ───────────────────────────────────────────────────────────  */
+
+.glitch-text {
+  position: relative;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.glitch-text::before {
+  color: var(--grid-cyan);
+  opacity: 0.7;
+  animation: glitchBefore 4.5s steps(1) infinite;
   mix-blend-mode: screen;
-  animation: noiseDrift 14s linear infinite;
 }
 
-.grid-scanlines {
-  background-image: linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px);
-  background-size: 100% 4px;
-  mask-image: linear-gradient(180deg, rgba(255,255,255,0.45), transparent 80%);
-  animation: scanPulse 5.5s ease-in-out infinite;
+.glitch-text::after {
+  color: var(--grid-magenta);
+  opacity: 0.55;
+  animation: glitchAfter 4.5s steps(1) infinite;
+  mix-blend-mode: screen;
 }
 
-/* ─── Components ─────────────────────────────────────────────────────────── */
-@layer components {
+/* ─── Boot scan line ────────────────────────────────────────────────────────  */
 
-  .panel-shell {
-    @apply relative overflow-hidden rounded-[26px] border border-white/10 p-5;
-    background: linear-gradient(155deg, rgba(10,16,36,0.9), rgba(6,10,24,0.78));
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
-    box-shadow:
-      0 0 0 1px rgba(77,247,255,0.1),
-      0 4px 28px rgba(44,139,255,0.1),
-      inset 0 1px 0 rgba(255,255,255,0.07);
-  }
+.boot-scan-line {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
 
-  .panel-title  { @apply text-[11px] font-medium uppercase tracking-[0.4em] text-grid-muted; }
-  .panel-kicker { @apply mt-2 text-xs uppercase tracking-[0.32em] text-grid-cyan/80; }
-
-  /* ✅ FIXED BLOCK */
-  .data-chip {
-  @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.3em] text-grid-muted transition-all duration-200 hover:border-white/20 hover:bg-white/10 hover:text-grid-text;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
-  }
-
-  .grid-button {
-    @apply relative inline-flex items-center justify-center overflow-hidden rounded-full border border-grid-cyan/40 px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.3em] text-grid-text transition-all duration-300;
-    background: linear-gradient(135deg, rgba(77,247,255,0.16), rgba(44,139,255,0.12), rgba(255,79,216,0.1));
-  }
-
-  .grid-input {
-    @apply h-12 w-full rounded-2xl border border-white/10 bg-black/20 px-4 text-sm text-grid-text outline-none transition-all duration-300;
-  }
-
-  .status-dot-online {
-    @apply h-2.5 w-2.5 shrink-0 rounded-full bg-grid-cyan;
-  }
+.boot-scan-line::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--grid-cyan), transparent);
+  opacity: 0.5;
+  animation: scanLine 3.5s linear;
 }

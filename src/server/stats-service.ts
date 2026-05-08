@@ -4,8 +4,8 @@ import type { UserStats } from "@/lib/grid";
 import { getRepository } from "@/server/storage/repository";
 
 /**
- * Compute user stats from the authoritative ledger + transaction log.
- * Used by the weekly report and dashboard.
+ * Compute user stats from the ledger + coupon collections.
+ * Used by the weekly report and any external stats endpoints.
  */
 export async function getUserStats(memberId: string): Promise<UserStats | null> {
   const repo = getRepository();

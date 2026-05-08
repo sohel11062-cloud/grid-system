@@ -7,30 +7,20 @@ import { AppError, ErrorCode } from "@/server/errors";
 import { syncAllMembers } from "@/server/grid-service";
 import { handleRouteError, applySecurityHeaders } from "@/server/http";
 
-function assertCronSecret(request: NextRequest): void {
+function assertSecret(req: NextRequest) {
   const env   = getEnv();
-  const auth  = request.headers.get("authorization") ?? "";
-  const token =
-    auth.replace(/^Bearer\s+/i, "").trim() ||
-    (request.headers.get("x-cron-secret") ?? "").trim();
-
-  if (!token || token !== env.CRON_SECRET) {
-    throw new AppError("Invalid or missing cron secret.", 401, ErrorCode.AUTH_REQUIRED);
-  }
+  const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim()
+    || (req.headers.get("x-cron-secret") ?? "").trim();
+  if (!token || token !== env.CRON_SECRET)
+    throw new AppError("Unauthorized.", 401, ErrorCode.AUTH_REQUIRED);
 }
 
 export async function GET(request: NextRequest) {
   try {
-    assertCronSecret(request);
+    assertSecret(request);
     const result   = await syncAllMembers();
-    const response = NextResponse.json({
-      success: true,
-      runAt:   new Date().toISOString(),
-      ...result,
-    });
+    const response = NextResponse.json({ success: true, runAt: new Date().toISOString(), ...result });
     applySecurityHeaders(response);
     return response;
-  } catch (error) {
-    return handleRouteError(error);
-  }
+  } catch (error) { return handleRouteError(error); }
 }

@@ -1,121 +1,140 @@
 import "server-only";
 
-import { AppError } from "@/server/errors";
 import { getEnv } from "@/server/env";
-import type { GridOAuthState, GridSession } from "@/server/session";
+import { AppError, ErrorCode } from "@/server/errors";
+import { MSG } from "@/server/brand";
 import {
-  createHeadlessWixClient,
-  createOauthStateRecord,
+  buildLoginUrl,
+  exchangeCodeForTokens,
+  generatePKCE,
+  generateState,
   getAuthenticatedMember,
-  sessionToSdkTokens,
-  toOauthData,
-  tokensToSessionFields,
+  refreshAccessToken,
 } from "@/server/wix-headless-client";
+import type { GridOAuthState, GridSession } from "@/server/session";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-function resolveUsername(m: {
-  nickname: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  email: string;
-}): string {
-  if (m.nickname?.trim()) return m.nickname.trim();
-  const full = [m.firstName, m.lastName].filter(Boolean).join(" ").trim();
-  if (full) return full;
-  if (m.email?.trim()) return m.email.trim();
-  return "GRID_USER";
+export interface AuthState {
+  session:   GridSession;
+  refreshed: boolean;
 }
 
-function sanitiseReturnUri(raw: string | undefined, fallback: string): string {
-  if (!raw) return fallback;
-  try {
-    const candidate = new URL(raw);
-    const base = new URL(fallback);
-    return candidate.origin === base.origin ? candidate.toString() : fallback;
-  } catch {
-    return fallback;
-  }
-}
+// ─── Start login flow ─────────────────────────────────────────────────────────
 
-// ─── Login flow ───────────────────────────────────────────────────────────────
+export async function startLoginFlow(returnTo?: string): Promise<{
+  redirectUrl: string;
+  oauthState:  GridOAuthState;
+}> {
+  const env         = getEnv();
+  const redirectUri = `${env.APP_URL}/auth/callback`;
+  const { verifier, challenge } = generatePKCE();
+  const state       = generateState();
+  const now         = new Date().toISOString();
 
-export async function startLoginFlow(returnTo?: string) {
-  const env = getEnv();
-  const redirectUri = new URL("/auth/callback", env.APP_URL).toString();
-  const client = createHeadlessWixClient();
-
-  const oauthData = client.auth.generateOAuthData(
+  const oauthState: GridOAuthState = {
+    state,
+    codeChallenge: challenge,
+    codeVerifier:  verifier,
     redirectUri,
-    sanitiseReturnUri(returnTo, env.APP_URL)
-  );
+    originalUri:   returnTo ?? "/",
+    createdAt:     now,
+  };
 
-  const { authUrl } = await client.auth.getAuthUrl(oauthData, {
-    prompt: "login",
-    responseMode: "fragment",
+  const redirectUrl = buildLoginUrl({
+    state,
+    codeChallenge: challenge,
+    redirectUri,
   });
 
-  return {
-    redirectUrl:  authUrl,
-    oauthState:   createOauthStateRecord(oauthData) satisfies GridOAuthState,
-  };
+  return { redirectUrl, oauthState };
 }
 
-// ─── Code exchange ────────────────────────────────────────────────────────────
+// ─── Exchange code for session ────────────────────────────────────────────────
 
-export async function exchangeCodeForSession(input: {
-  code: string;
-  state: string;
-  oauthState: GridOAuthState | null;
+export async function exchangeCodeForSession(params: {
+  code:        string;
+  state:       string;
+  oauthState:  GridOAuthState | null;
 }): Promise<GridSession> {
-  if (!input.oauthState || input.oauthState.state !== input.state) {
-    throw new AppError("OAuth state mismatch or expired. Please restart login.", 401);
+  const { code, state, oauthState } = params;
+
+  if (!oauthState) {
+    throw new AppError(
+      "OAuth state not found. Please restart the login flow.",
+      400,
+      ErrorCode.VALIDATION_ERROR
+    );
   }
 
-  const client = createHeadlessWixClient();
-  const tokens = await client.auth.getMemberTokens(
-    input.code,
-    input.state,
-    toOauthData(input.oauthState)
-  );
+  if (state !== oauthState.state) {
+    throw new AppError(
+      "OAuth state mismatch — possible CSRF attempt.",
+      400,
+      ErrorCode.VALIDATION_ERROR
+    );
+  }
 
-  const member = await getAuthenticatedMember(tokens);
+  const tokens = await exchangeCodeForTokens({
+    code,
+    codeVerifier: oauthState.codeVerifier,
+    redirectUri:  oauthState.redirectUri,
+  });
 
-  return {
-    memberId:  member.memberId,
-    contactId: member.contactId,
-    email:     member.email,
-    username:  resolveUsername(member),
-    ...tokensToSessionFields(tokens),
-    createdAt: new Date().toISOString(),
+  const member  = await getAuthenticatedMember(tokens.access_token);
+  const now     = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+
+  const username =
+    member.profile?.nickname?.trim() ||
+    [member.contact?.firstName, member.contact?.lastName]
+      .filter(Boolean).join(" ").trim() ||
+    member.loginEmail?.trim() ||
+    "GRID_USER";
+
+  const session: GridSession = {
+    memberId:             member.id,
+    contactId:            member.contactId ?? null,
+    email:                member.loginEmail ?? "",
+    username,
+    accessToken:          tokens.access_token,
+    refreshToken:         tokens.refresh_token,
+    refreshTokenRole:     "member",
+    accessTokenExpiresAt: expiresAt,
+    createdAt:            now,
   };
+
+  return session;
 }
 
-// ─── Token refresh ────────────────────────────────────────────────────────────
+// ─── Refresh session if token nearing expiry ──────────────────────────────────
 
 export async function refreshSessionIfNeeded(
   session: GridSession
-): Promise<{ session: GridSession; refreshed: boolean }> {
-  const expiresAt = new Date(session.accessTokenExpiresAt).getTime();
-  const fiveMinutesMs = 5 * 60 * 1000;
+): Promise<AuthState> {
+  const expiresAt  = new Date(session.accessTokenExpiresAt).getTime();
+  const fiveMinMs  = 5 * 60 * 1000;
 
-  if (expiresAt > Date.now() + fiveMinutesMs) {
+  if (Date.now() < expiresAt - fiveMinMs) {
     return { session, refreshed: false };
   }
 
-  const sdkTokens = sessionToSdkTokens(session);
-  const client = createHeadlessWixClient(sdkTokens);
+  try {
+    const tokens    = await refreshAccessToken(session.refreshToken);
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
-  const refreshed = await client.auth.renewToken({
-    value: session.refreshToken,
-    role: sdkTokens.refreshToken.role,
-  });
-
-  return {
-    refreshed: true,
-    session: {
+    const refreshed: GridSession = {
       ...session,
-      ...tokensToSessionFields(refreshed),
-    },
-  };
+      accessToken:          tokens.access_token,
+      refreshToken:         tokens.refresh_token || session.refreshToken,
+      accessTokenExpiresAt: expiresAt,
+    };
+
+    return { session: refreshed, refreshed: true };
+  } catch {
+    // If refresh fails, return the existing session — let the next call
+    // fail with 401 rather than proactively killing the session.
+    console.warn("[GRID_AUTH] Token refresh failed — returning existing session");
+    return { session, refreshed: false };
+  }
 }

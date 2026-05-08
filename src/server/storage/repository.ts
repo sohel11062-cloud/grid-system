@@ -14,146 +14,98 @@ import { getEnv } from "@/server/env";
 // ─── Interface ────────────────────────────────────────────────────────────────
 
 export interface GridRepository {
-  // ── Ledger ────────────────────────────────────────────────────────────────
   getMemberLedger(memberId: string): Promise<GridMemberLedger | null>;
   upsertMemberLedger(ledger: GridMemberLedger): Promise<GridMemberLedger>;
   atomicRedemption(memberId: string, creds: number, now: string): Promise<GridMemberLedger | null>;
   listTopMembers(limit: number): Promise<GridLeaderboardEntry[]>;
 
-  // ── Coupons ───────────────────────────────────────────────────────────────
   listCouponsByMember(memberId: string, limit?: number): Promise<GridCouponRecord[]>;
   listCouponsByStatus(memberId: string, status: GridCouponStatus): Promise<GridCouponRecord[]>;
   saveCoupon(coupon: GridCouponRecord): Promise<GridCouponRecord>;
-  /**
-   * Atomically mark a coupon as USED.
-   * Only succeeds if current status is NOT already "USED" or "EXPIRED".
-   * Returns true if the update was applied.
-   */
   markCouponUsed(code: string, orderId: string, usedAt: string): Promise<boolean>;
-  /**
-   * Mark all ACTIVE coupons whose expiresAt < now as EXPIRED.
-   * Returns count of expired coupons.
-   */
   expireStaleCoupons(memberId: string, now: string): Promise<number>;
 
-  // ── Credit transactions ───────────────────────────────────────────────────
   saveCreditTransaction(tx: CreditTransaction): Promise<void>;
-  /**
-   * Returns paginated credit transactions for a member, newest first.
-   */
-  listCreditTransactions(
-    memberId: string,
-    opts?: { limit?: number; skip?: number; since?: Date }
-  ): Promise<CreditTransaction[]>;
-  /**
-   * Returns true if a REDEEM transaction already exists for this referenceId.
-   * Prevents duplicate deductions on retry.
-   */
+  listCreditTransactions(memberId: string, opts?: { limit?: number; skip?: number; since?: Date }): Promise<CreditTransaction[]>;
   hasRedeemTransaction(memberId: string, referenceId: string): Promise<boolean>;
 
-  // ── Order history ─────────────────────────────────────────────────────────
   saveOrderHistory(order: OrderHistory): Promise<void>;
-  /**
-   * Returns the set of order IDs already recorded in order_history for this member.
-   * Used for O(1) duplicate detection during sync.
-   */
   getProcessedOrderIds(memberId: string): Promise<Set<string>>;
 
-  // ── Analytics (used by reports) ───────────────────────────────────────────
   getAllMemberIds(): Promise<string[]>;
-  getTransactionSummary(
-    memberId: string,
-    since: Date
-  ): Promise<{ earned: number; redeemed: number; txCount: number }>;
+  getTransactionSummary(memberId: string, since: Date): Promise<{ earned: number; redeemed: number; txCount: number }>;
   getCouponSummary(memberId: string): Promise<{
-    total:   number;
-    active:  number;
-    used:    number;
-    expired: number;
-    failed:  number;
+    total: number; active: number; used: number; expired: number; failed: number;
     totalSavingsRupees: number;
   }>;
 }
 
 // ─── Collection names ─────────────────────────────────────────────────────────
 
-const COL_MEMBERS  = "grid_members";
-const COL_COUPONS  = "grid_coupons";
-const COL_TX       = "credit_transactions";
-const COL_ORDERS   = "order_history";
+const COL_MEMBERS = "grid_members";
+const COL_COUPONS = "grid_coupons";
+const COL_TX      = "credit_transactions";
+const COL_ORDERS  = "order_history";
 
-// ─── Global singletons ────────────────────────────────────────────────────────
+// ─── Globals ──────────────────────────────────────────────────────────────────
 
 declare global {
   // eslint-disable-next-line no-var
-  var __GRID_MONGO_CLIENT__: Promise<MongoClient> | undefined;
+  var __GRID_MONGO_CLIENT__:   Promise<MongoClient>     | undefined;
   // eslint-disable-next-line no-var
-  var __GRID_INDEXES_ENSURED__: boolean | undefined;
+  var __GRID_INDEXES_ENSURED__: boolean                 | undefined;
   // eslint-disable-next-line no-var
-  var __GRID_MEM_REPO__: MemoryGridRepository | undefined;
+  var __GRID_MEM_REPO__:        MemoryGridRepository    | undefined;
   // eslint-disable-next-line no-var
-  var __GRID_MONGO_REPO__: MongoGridRepository | undefined;
+  var __GRID_MONGO_REPO__:      MongoGridRepository     | undefined;
 }
 
 // ─── Index setup ──────────────────────────────────────────────────────────────
 
 async function ensureIndexes(db: Db): Promise<void> {
   if (global.__GRID_INDEXES_ENSURED__) return;
-
-  await Promise.all([
-    // Members
+  await Promise.allSettled([
     db.collection(COL_MEMBERS).createIndex({ memberId: 1 }, { unique: true }),
-
-    // Coupons — unique code, queryable by member + status
-    db.collection(COL_COUPONS).createIndex({ code: 1 },                         { unique: true }),
+    db.collection(COL_COUPONS).createIndex({ code: 1 },     { unique: true }),
     db.collection(COL_COUPONS).createIndex({ memberId: 1, status: 1 }),
     db.collection(COL_COUPONS).createIndex({ memberId: 1, createdAt: -1 }),
     db.collection(COL_COUPONS).createIndex({ expiresAt: 1 }),
-
-    // Credit transactions — prevent duplicate entries for same (member, referenceId, type)
     db.collection(COL_TX).createIndex(
       { memberId: 1, referenceId: 1, type: 1 },
       { unique: true }
     ),
     db.collection(COL_TX).createIndex({ memberId: 1, createdAt: -1 }),
-    db.collection(COL_TX).createIndex({ createdAt: -1 }),  // for weekly report scans
-
-    // Order history — unique per order, fast lookup by member
-    db.collection(COL_ORDERS).createIndex({ orderId: 1 },      { unique: true }),
+    db.collection(COL_TX).createIndex({ createdAt: -1 }),
+    db.collection(COL_ORDERS).createIndex({ orderId: 1 },   { unique: true }),
     db.collection(COL_ORDERS).createIndex({ memberId: 1 }),
     db.collection(COL_ORDERS).createIndex({ memberId: 1, createdAt: -1 }),
   ]);
-
   global.__GRID_INDEXES_ENSURED__ = true;
 }
 
 // ─── In-memory implementation ─────────────────────────────────────────────────
 
 class MemoryGridRepository implements GridRepository {
-  private members  = new Map<string, GridMemberLedger>();
-  private coupons  = new Map<string, GridCouponRecord[]>();
-  private txs      = new Map<string, CreditTransaction[]>();
-  private orders   = new Map<string, OrderHistory[]>();
+  private members = new Map<string, GridMemberLedger>();
+  private coupons = new Map<string, GridCouponRecord[]>();
+  private txs     = new Map<string, CreditTransaction[]>();
+  private orders  = new Map<string, OrderHistory[]>();
 
-  // ── Ledger ────────────────────────────────────────────────────────────────
+  async getMemberLedger(m: string) { return this.members.get(m) ?? null; }
 
-  async getMemberLedger(memberId: string) {
-    return this.members.get(memberId) ?? null;
-  }
-
-  async upsertMemberLedger(ledger: GridMemberLedger) {
-    this.members.set(ledger.memberId, { ...ledger });
-    return ledger;
+  async upsertMemberLedger(l: GridMemberLedger) {
+    this.members.set(l.memberId, { ...l });
+    return l;
   }
 
   async atomicRedemption(memberId: string, creds: number, now: string) {
-    // Node.js single-thread: no await between read and write = atomic
-    const ledger = this.members.get(memberId);
-    if (!ledger || ledger.availableCreds < creds) return null;
+    // No await between read and write = atomic in single-thread Node.js
+    const l = this.members.get(memberId);
+    if (!l || l.availableCreds < creds) return null;
     const updated: GridMemberLedger = {
-      ...ledger,
-      redeemedCreds:  ledger.redeemedCreds + creds,
-      availableCreds: ledger.availableCreds - creds,
+      ...l,
+      redeemedCreds:  l.redeemedCreds + creds,
+      availableCreds: l.availableCreds - creds,
       updatedAt:      now,
     };
     this.members.set(memberId, updated);
@@ -167,9 +119,7 @@ class MemoryGridRepository implements GridRepository {
       .map((l) => ({ memberId: l.memberId, username: l.username, level: l.level, lifetimeCreds: l.lifetimeCreds }));
   }
 
-  // ── Coupons ───────────────────────────────────────────────────────────────
-
-  async listCouponsByMember(memberId: string, limit = 8) {
+  async listCouponsByMember(memberId: string, limit = 20) {
     return (this.coupons.get(memberId) ?? [])
       .slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
   }
@@ -180,14 +130,13 @@ class MemoryGridRepository implements GridRepository {
 
   async saveCoupon(coupon: GridCouponRecord) {
     const list = this.coupons.get(coupon.memberId) ?? [];
-    // Prevent duplicate codes
     if (!list.find((c) => c.code === coupon.code)) list.push({ ...coupon });
     this.coupons.set(coupon.memberId, list);
     return coupon;
   }
 
   async markCouponUsed(code: string, orderId: string, usedAt: string) {
-    for (const [, list] of this.coupons.entries()) {
+    for (const [, list] of this.coupons) {
       const idx = list.findIndex((c) => c.code === code && c.status !== "USED" && c.status !== "EXPIRED");
       if (idx !== -1) {
         list[idx] = { ...list[idx], status: "USED", usedAt, orderId };
@@ -199,7 +148,7 @@ class MemoryGridRepository implements GridRepository {
 
   async expireStaleCoupons(memberId: string, now: string) {
     const list = this.coupons.get(memberId) ?? [];
-    let count = 0;
+    let count  = 0;
     const updated = list.map((c) => {
       if (c.status === "ACTIVE" && c.expiresAt && c.expiresAt < now) {
         count++;
@@ -211,31 +160,21 @@ class MemoryGridRepository implements GridRepository {
     return count;
   }
 
-  // ── Credit transactions ───────────────────────────────────────────────────
-
   async saveCreditTransaction(tx: CreditTransaction) {
-    // Dedup by (memberId, referenceId, type)
     const list = this.txs.get(tx.memberId) ?? [];
     const dup  = list.find((t) => t.referenceId === tx.referenceId && t.type === tx.type);
     if (!dup) { list.push({ ...tx }); this.txs.set(tx.memberId, list); }
   }
 
   async listCreditTransactions(memberId: string, opts?: { limit?: number; skip?: number; since?: Date }) {
-    let list = (this.txs.get(memberId) ?? [])
-      .slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    let list = (this.txs.get(memberId) ?? []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     if (opts?.since) list = list.filter((t) => new Date(t.createdAt) >= opts.since!);
-    const skip  = opts?.skip  ?? 0;
-    const limit = opts?.limit ?? 20;
-    return list.slice(skip, skip + limit);
+    return list.slice(opts?.skip ?? 0, (opts?.skip ?? 0) + (opts?.limit ?? 20));
   }
 
   async hasRedeemTransaction(memberId: string, referenceId: string) {
-    return !!(this.txs.get(memberId) ?? []).find(
-      (t) => t.referenceId === referenceId && t.type === "REDEEM"
-    );
+    return !!(this.txs.get(memberId) ?? []).find((t) => t.referenceId === referenceId && t.type === "REDEEM");
   }
-
-  // ── Order history ─────────────────────────────────────────────────────────
 
   async saveOrderHistory(order: OrderHistory) {
     const list = this.orders.get(order.memberId) ?? [];
@@ -249,16 +188,10 @@ class MemoryGridRepository implements GridRepository {
     return new Set((this.orders.get(memberId) ?? []).map((o) => o.orderId));
   }
 
-  // ── Analytics ─────────────────────────────────────────────────────────────
-
-  async getAllMemberIds() {
-    return [...this.members.keys()];
-  }
+  async getAllMemberIds() { return [...this.members.keys()]; }
 
   async getTransactionSummary(memberId: string, since: Date) {
-    const list = (this.txs.get(memberId) ?? []).filter(
-      (t) => new Date(t.createdAt) >= since
-    );
+    const list = (this.txs.get(memberId) ?? []).filter((t) => new Date(t.createdAt) >= since);
     return {
       earned:   list.filter((t) => t.type === "EARN" || t.type === "BONUS").reduce((s, t) => s + t.amount, 0),
       redeemed: list.filter((t) => t.type === "REDEEM").reduce((s, t) => s + t.amount, 0),
@@ -284,7 +217,6 @@ class MemoryGridRepository implements GridRepository {
 class MongoGridRepository implements GridRepository {
   private async db(): Promise<Db> {
     const { MONGODB_URI, MONGODB_DB_NAME } = getEnv();
-
     if (!global.__GRID_MONGO_CLIENT__) {
       global.__GRID_MONGO_CLIENT__ = new MongoClient(MONGODB_URI!, {
         serverSelectionTimeoutMS: 10_000,
@@ -292,13 +224,10 @@ class MongoGridRepository implements GridRepository {
         socketTimeoutMS:          30_000,
       }).connect();
     }
-
     const db = (await global.__GRID_MONGO_CLIENT__).db(MONGODB_DB_NAME);
-    await ensureIndexes(db); // no-op after first call
+    await ensureIndexes(db);
     return db;
   }
-
-  // ── Ledger ────────────────────────────────────────────────────────────────
 
   async getMemberLedger(memberId: string) {
     const db  = await this.db();
@@ -318,7 +247,7 @@ class MongoGridRepository implements GridRepository {
   }
 
   async atomicRedemption(memberId: string, creds: number, now: string) {
-    const db = await this.db();
+    const db     = await this.db();
     const result = await db.collection<GridMemberLedger>(COL_MEMBERS).findOneAndUpdate(
       { memberId, availableCreds: { $gte: creds } },
       {
@@ -335,17 +264,10 @@ class MongoGridRepository implements GridRepository {
     const docs = await db.collection<GridMemberLedger>(COL_MEMBERS)
       .find({}, { projection: { _id: 0 } })
       .sort({ lifetimeCreds: -1 }).limit(limit).toArray();
-    return docs.map((l) => ({
-      memberId:      l.memberId,
-      username:      l.username,
-      level:         l.level,
-      lifetimeCreds: l.lifetimeCreds,
-    }));
+    return docs.map((l) => ({ memberId: l.memberId, username: l.username, level: l.level, lifetimeCreds: l.lifetimeCreds }));
   }
 
-  // ── Coupons ───────────────────────────────────────────────────────────────
-
-  async listCouponsByMember(memberId: string, limit = 8) {
+  async listCouponsByMember(memberId: string, limit = 20) {
     const db = await this.db();
     return db.collection<GridCouponRecord>(COL_COUPONS)
       .find({ memberId }, { projection: { _id: 0 } })
@@ -361,46 +283,33 @@ class MongoGridRepository implements GridRepository {
 
   async saveCoupon(coupon: GridCouponRecord) {
     const db = await this.db();
-    // insertOne with ignore on duplicate key (unique index on `code`)
     try {
       await db.collection<GridCouponRecord>(COL_COUPONS).insertOne({ ...coupon } as never);
     } catch (e) {
       if ((e as { code?: number }).code === 11000) {
-        // Duplicate code — silently ignore (idempotent)
-        console.warn("[THE_GRID_REPO] Duplicate coupon code ignored:", coupon.code);
-      } else {
-        throw e;
-      }
+        console.warn("[GRID_REPO] Duplicate coupon code ignored:", coupon.code);
+      } else { throw e; }
     }
     return coupon;
   }
 
   async markCouponUsed(code: string, orderId: string, usedAt: string) {
-    const db = await this.db();
+    const db     = await this.db();
     const result = await db.collection<GridCouponRecord>(COL_COUPONS).updateOne(
-      {
-        code,
-        status: { $nin: ["USED", "EXPIRED"] }, // Idempotent guard
-      },
+      { code, status: { $nin: ["USED", "EXPIRED"] } },
       { $set: { status: "USED", usedAt, orderId } }
     );
     return result.modifiedCount > 0;
   }
 
   async expireStaleCoupons(memberId: string, now: string) {
-    const db = await this.db();
+    const db     = await this.db();
     const result = await db.collection<GridCouponRecord>(COL_COUPONS).updateMany(
-      {
-        memberId,
-        status:    "ACTIVE",
-        expiresAt: { $lt: now },
-      },
+      { memberId, status: "ACTIVE", expiresAt: { $lt: now } },
       { $set: { status: "EXPIRED" } }
     );
     return result.modifiedCount;
   }
-
-  // ── Credit transactions ───────────────────────────────────────────────────
 
   async saveCreditTransaction(tx: CreditTransaction) {
     const db = await this.db();
@@ -408,22 +317,15 @@ class MongoGridRepository implements GridRepository {
       await db.collection<CreditTransaction>(COL_TX).insertOne({ ...tx } as never);
     } catch (e) {
       if ((e as { code?: number }).code === 11000) {
-        // Duplicate (memberId, referenceId, type) — idempotent, ignore
-        console.warn("[THE_GRID_REPO] Duplicate credit_transaction ignored:", tx.referenceId, tx.type);
-      } else {
-        throw e;
-      }
+        console.warn("[GRID_REPO] Duplicate tx ignored:", tx.referenceId, tx.type);
+      } else { throw e; }
     }
   }
 
-  async listCreditTransactions(
-    memberId: string,
-    opts?: { limit?: number; skip?: number; since?: Date }
-  ) {
-    const db = await this.db();
+  async listCreditTransactions(memberId: string, opts?: { limit?: number; skip?: number; since?: Date }) {
+    const db    = await this.db();
     const query: Record<string, unknown> = { memberId };
     if (opts?.since) query.createdAt = { $gte: opts.since.toISOString() };
-
     return db.collection<CreditTransaction>(COL_TX)
       .find(query, { projection: { _id: 0 } })
       .sort({ createdAt: -1 })
@@ -439,30 +341,22 @@ class MongoGridRepository implements GridRepository {
     return !!doc;
   }
 
-  // ── Order history ─────────────────────────────────────────────────────────
-
   async saveOrderHistory(order: OrderHistory) {
     const db = await this.db();
     try {
       await db.collection<OrderHistory>(COL_ORDERS).insertOne({ ...order } as never);
     } catch (e) {
-      if ((e as { code?: number }).code === 11000) {
-        // Duplicate orderId — already processed, skip silently
-      } else {
-        throw e;
-      }
+      if ((e as { code?: number }).code !== 11000) throw e;
+      // Duplicate orderId — idempotent, skip
     }
   }
 
   async getProcessedOrderIds(memberId: string) {
     const db   = await this.db();
     const docs = await db.collection<OrderHistory>(COL_ORDERS)
-      .find({ memberId }, { projection: { _id: 0, orderId: 1 } })
-      .toArray();
+      .find({ memberId }, { projection: { _id: 0, orderId: 1 } }).toArray();
     return new Set(docs.map((d) => d.orderId));
   }
-
-  // ── Analytics ─────────────────────────────────────────────────────────────
 
   async getAllMemberIds() {
     const db   = await this.db();
@@ -472,15 +366,9 @@ class MongoGridRepository implements GridRepository {
   }
 
   async getTransactionSummary(memberId: string, since: Date) {
-    const db = await this.db();
-
+    const db  = await this.db();
     const agg = await db.collection<CreditTransaction>(COL_TX).aggregate([
-      {
-        $match: {
-          memberId,
-          createdAt: { $gte: since.toISOString() },
-        },
-      },
+      { $match: { memberId, createdAt: { $gte: since.toISOString() } } },
       {
         $group: {
           _id:      null,
@@ -490,38 +378,25 @@ class MongoGridRepository implements GridRepository {
         },
       },
     ]).toArray();
-
-    const row = agg[0] as { earned?: number; redeemed?: number; txCount?: number } | undefined;
-    return {
-      earned:   row?.earned   ?? 0,
-      redeemed: row?.redeemed ?? 0,
-      txCount:  row?.txCount  ?? 0,
-    };
+    const r = agg[0] as { earned?: number; redeemed?: number; txCount?: number } | undefined;
+    return { earned: r?.earned ?? 0, redeemed: r?.redeemed ?? 0, txCount: r?.txCount ?? 0 };
   }
 
   async getCouponSummary(memberId: string) {
-    const db = await this.db();
-
+    const db  = await this.db();
     const agg = await db.collection<GridCouponRecord>(COL_COUPONS).aggregate([
       { $match: { memberId } },
-      {
-        $group: {
-          _id:               "$status",
-          count:             { $sum: 1 },
-          totalValueRupees:  { $sum: "$valueRupees" },
-        },
-      },
+      { $group: { _id: "$status", count: { $sum: 1 }, totalValueRupees: { $sum: "$valueRupees" } } },
     ]).toArray() as Array<{ _id: string; count: number; totalValueRupees: number }>;
 
-    const byStatus = Object.fromEntries(agg.map((r) => [r._id, r]));
-
+    const by = Object.fromEntries(agg.map((r) => [r._id, r]));
     return {
-      total:   agg.reduce((s, r) => s + r.count, 0),
-      active:  byStatus["ACTIVE"]?.count  ?? 0,
-      used:    byStatus["USED"]?.count    ?? 0,
-      expired: byStatus["EXPIRED"]?.count ?? 0,
-      failed:  byStatus["FAILED"]?.count  ?? 0,
-      totalSavingsRupees: byStatus["USED"]?.totalValueRupees ?? 0,
+      total:              agg.reduce((s, r) => s + r.count, 0),
+      active:             by["ACTIVE"]?.count  ?? 0,
+      used:               by["USED"]?.count    ?? 0,
+      expired:            by["EXPIRED"]?.count ?? 0,
+      failed:             by["FAILED"]?.count  ?? 0,
+      totalSavingsRupees: by["USED"]?.totalValueRupees ?? 0,
     };
   }
 }
@@ -530,12 +405,10 @@ class MongoGridRepository implements GridRepository {
 
 export function getRepository(): GridRepository {
   const { MONGODB_URI } = getEnv();
-
   if (!MONGODB_URI) {
     if (!global.__GRID_MEM_REPO__) global.__GRID_MEM_REPO__ = new MemoryGridRepository();
     return global.__GRID_MEM_REPO__;
   }
-
   if (!global.__GRID_MONGO_REPO__) global.__GRID_MONGO_REPO__ = new MongoGridRepository();
   return global.__GRID_MONGO_REPO__;
 }

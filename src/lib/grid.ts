@@ -27,47 +27,41 @@ export interface CreditTransaction {
   amount:       number;
   balanceAfter: number;
   source:       CreditTransactionSource;
-  referenceId:  string;       // orderId, couponCode, "WELCOME_BONUS", etc.
+  referenceId:  string;
   description?: string;
   metadata?:    Record<string, unknown>;
-  createdAt:    string;       // ISO string
+  createdAt:    string;
 }
 
 // ─── Order history ────────────────────────────────────────────────────────────
 
 export interface OrderHistory {
-  orderId:      string;
-  memberId:     string;
-  amount:       number;
-  currency:     string;
-  couponCode?:  string;
-  credsEarned:  number;
-  createdAt:    string;
-  syncedAt:     string;
+  orderId:     string;
+  memberId:    string;
+  amount:      number;
+  currency:    string;
+  couponCode?: string;
+  credsEarned: number;
+  createdAt:   string;
+  syncedAt:    string;
 }
 
-// ─── Order summary (for dashboard) ───────────────────────────────────────────
+// ─── Order summary (dashboard) ───────────────────────────────────────────────
 
 export interface GridOrderSummary {
-  id:             string;
-  number:         string;
-  total:          number;
-  currency:       string;
-  purchasedDate:  string | null;
-  status:         string;
-  paymentStatus:  string;
-  items:          string[];
-  couponCode?:    string;     // NEW – populated from appliedCoupon
+  id:            string;
+  number:        string;
+  total:         number;
+  currency:      string;
+  purchasedDate: string | null;
+  status:        string;
+  paymentStatus: string;
+  items:         string[];
+  couponCode?:   string;
 }
 
 // ─── Coupon types ─────────────────────────────────────────────────────────────
 
-/**
- * ACTIVE  = coupon created in Wix, available for the member to use
- * USED    = member applied it to a Wix order
- * EXPIRED = past expiresAt date
- * FAILED  = Wix coupon creation failed (creds NOT deducted)
- */
 export type GridCouponStatus = "ACTIVE" | "USED" | "EXPIRED" | "FAILED";
 
 export interface GridCouponRecord {
@@ -80,9 +74,9 @@ export interface GridCouponRecord {
   credsSpent:   number;
   status:       GridCouponStatus;
   createdAt:    string;
-  expiresAt?:   string;       // NEW – ISO string
-  usedAt?:      string;       // NEW – ISO string, set when status → USED
-  orderId?:     string;       // NEW – the order that consumed this coupon
+  expiresAt?:   string;
+  usedAt?:      string;
+  orderId?:     string;
   wixCouponId?: string;
   note?:        string;
 }
@@ -120,7 +114,7 @@ export interface GridLeaderboardEntry {
   lifetimeCreds: number;
 }
 
-// ─── User stats (derived from transactions) ───────────────────────────────────
+// ─── User stats ───────────────────────────────────────────────────────────────
 
 export interface UserStats {
   memberId:               string;
@@ -136,7 +130,7 @@ export interface UserStats {
   totalSavingsRupees:     number;
 }
 
-// ─── Lifetime stats (dashboard summary) ──────────────────────────────────────
+// ─── Lifetime stats (dashboard) ───────────────────────────────────────────────
 
 export interface LifetimeStats {
   totalSavingsRupees:  number;
@@ -148,18 +142,18 @@ export interface LifetimeStats {
 // ─── Weekly report ────────────────────────────────────────────────────────────
 
 export interface WeeklyReportUser {
-  memberId:           string;
-  name:               string;
-  email:              string;
-  balance:            number;
-  earnedThisWeek:     number;
-  redeemedThisWeek:   number;
-  couponsCreated:     number;
-  couponsUsed:        number;
-  couponsActive:      number;
-  couponsExpired:     number;
-  savings:            number;
-  rank:               number;
+  memberId:          string;
+  name:              string;
+  email:             string;
+  balance:           number;
+  earnedThisWeek:    number;
+  redeemedThisWeek:  number;
+  couponsCreated:    number;
+  couponsUsed:       number;
+  couponsActive:     number;
+  couponsExpired:    number;
+  savings:           number;
+  rank:              number;
 }
 
 export interface WeeklyReport {
@@ -168,13 +162,13 @@ export interface WeeklyReport {
   weekEnd:     string;
   users:       WeeklyReportUser[];
   summary: {
-    totalActiveUsers:      number;
-    totalTransactions:     number;
-    totalCouponsCreated:   number;
-    totalCouponsUsed:      number;
-    conversionRatePct:     number;
-    totalSavingsRupees:    number;
-    topUsers:              WeeklyReportUser[];
+    totalActiveUsers:    number;
+    totalTransactions:   number;
+    totalCouponsCreated: number;
+    totalCouponsUsed:    number;
+    conversionRatePct:   number;
+    totalSavingsRupees:  number;
+    topUsers:            WeeklyReportUser[];
   };
 }
 
@@ -199,11 +193,11 @@ export interface GridDashboardData {
     progressRatio:      number;
     credsToNextLevel:   number;
   };
-  orders:               GridOrderSummary[];
-  coupons:              GridCouponRecord[];
-  leaderboard:          GridLeaderboardEntry[];
-  recentTransactions:   CreditTransaction[];  // NEW — last 10
-  lifetimeStats:        LifetimeStats;        // NEW — computed from coupons
+  orders:             GridOrderSummary[];
+  coupons:            GridCouponRecord[];
+  leaderboard:        GridLeaderboardEntry[];
+  recentTransactions: CreditTransaction[];
+  lifetimeStats:      LifetimeStats;
   system: {
     syncWindowLabel: string;
     syncedAt:        string;
@@ -211,19 +205,21 @@ export interface GridDashboardData {
   };
 }
 
-// ─── Tier helpers ─────────────────────────────────────────────────────────────
+// ─── Tier data ────────────────────────────────────────────────────────────────
 
 export const GRID_TIERS: GridTier[] = [
-  { key: "THE_GLITCH",      min: 0,        max: 50000,   label: "THE_GLITCH",      mantra: "Entry node. Signal unstable." },
-  { key: "NETRUNNER",       min: 50001,    max: 150000,  label: "NETRUNNER",       mantra: "Network access expanded." },
-  { key: "SYS-ADMIN",       min: 150001,   max: 350000,  label: "SYS-ADMIN",       mantra: "Privilege escalation complete." },
-  { key: "THE_ARCHITECT",   min: 350001,   max: 1000000, label: "THE_ARCHITECT",   mantra: "Reality edit access enabled." },
-  { key: "THE_SINGULARITY", min: 1000001,  max: null,    label: "THE_SINGULARITY", mantra: "System and self are one." },
+  { key: "THE_GLITCH",      min: 0,       max: 50000,   label: "THE_GLITCH",      mantra: "Entry node. Signal unstable."        },
+  { key: "NETRUNNER",       min: 50001,   max: 150000,  label: "NETRUNNER",       mantra: "Network access expanded."            },
+  { key: "SYS-ADMIN",       min: 150001,  max: 350000,  label: "SYS-ADMIN",       mantra: "Privilege escalation complete."      },
+  { key: "THE_ARCHITECT",   min: 350001,  max: 1000000, label: "THE_ARCHITECT",   mantra: "Reality edit access enabled."        },
+  { key: "THE_SINGULARITY", min: 1000001, max: null,    label: "THE_SINGULARITY", mantra: "System and self are one."            },
 ];
+
+// ─── Tier helpers ─────────────────────────────────────────────────────────────
 
 export function getGridTier(creds: number): GridTier {
   return (
-    GRID_TIERS.find((t) => creds >= t.min && (t.max === null || creds <= t.max)) ??
+    [...GRID_TIERS].reverse().find((t) => creds >= t.min) ??
     GRID_TIERS[0]
   );
 }
@@ -245,38 +241,44 @@ export function getGridProgress(creds: number): { ratio: number; remaining: numb
   };
 }
 
+// ─── Credit helpers ───────────────────────────────────────────────────────────
+
+/** ₹1 spent = 1 Cred (floor to integer) */
 export function rupeesToCreds(rupees: number): number {
-  return Math.max(Math.round(rupees), 0);
+  return Math.max(Math.floor(rupees), 0);
 }
 
+/** 100 Creds = ₹1 */
 export function credsToRupees(creds: number): number {
   return Math.max(Number((creds / 100).toFixed(2)), 0);
 }
 
 /**
- * Safely parse a monetary amount from Wix API.
- * Wix often returns amounts as strings like "1500.00".
+ * Safely parse a monetary amount from any API shape.
+ * Handles strings like "1500.00", numbers, and nulls.
  */
 export function normaliseAmount(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
   if (typeof value === "string") {
-    const parsed = Number(value.replace(/[^\d.-]/g, ""));
+    const cleaned = value.replace(/[^\d.]/g, "");
+    const parsed  = parseFloat(cleaned);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
   }
   return 0;
 }
 
+// ─── Formatting ───────────────────────────────────────────────────────────────
+
 export function formatIndianCurrency(value: number): string {
   return new Intl.NumberFormat("en-IN", {
-    style:               "currency",
-    currency:            "INR",
+    style:                 "currency",
+    currency:              "INR",
     maximumFractionDigits: 0,
   }).format(value);
 }
 
 export function formatCompactNumber(value: number): string {
-  return new Intl.NumberFormat("en-IN", {
-    notation:              "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000)     return `${(value / 1_000).toFixed(1)}K`;
+  return String(value);
 }

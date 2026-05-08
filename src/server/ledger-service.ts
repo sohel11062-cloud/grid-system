@@ -4,16 +4,6 @@ import { randomUUID } from "crypto";
 import type { CreditTransactionSource, CreditTransactionType } from "@/lib/grid";
 import { getRepository } from "@/server/storage/repository";
 
-/**
- * Central service for creating auditable credit transaction records.
- * Called by grid-service (EARN/BONUS) and coupon-service (REDEEM).
- *
- * RULES:
- * - Every call is idempotent (duplicate index on memberId+referenceId+type)
- * - `balanceAfter` reflects the ledger state at the time of the call
- * - Never throws — transaction failures are logged, not fatal
- */
-
 async function record(
   memberId:     string,
   type:         CreditTransactionType,
@@ -29,7 +19,7 @@ async function record(
       id:           randomUUID(),
       memberId,
       type,
-      amount:       Math.abs(Math.round(amount)), // always positive integer
+      amount:       Math.abs(Math.round(amount)),
       balanceAfter: Math.round(balanceAfter),
       source,
       referenceId,
@@ -38,15 +28,15 @@ async function record(
       createdAt:    new Date().toISOString(),
     });
   } catch (e) {
-    // Transaction logging must not crash the main flow
-    console.error("[THE_GRID_LEDGER_SERVICE] Failed to save credit_transaction:", {
-      memberId, type, source, referenceId, error: e,
+    // Transaction logging must NEVER crash the main flow
+    console.error("[GRID_LEDGER] Failed to save transaction:", {
+      memberId, type, source, referenceId,
+      error: e instanceof Error ? e.message : String(e),
     });
   }
 }
 
 export const ledgerService = {
-  /** Record credit earned from a Wix order */
   async recordEarnFromOrder(
     memberId:     string,
     credsEarned:  number,
@@ -60,7 +50,6 @@ export const ledgerService = {
     );
   },
 
-  /** Record a welcome or birthday bonus */
   async recordBonus(
     memberId:     string,
     amount:       number,
@@ -74,7 +63,6 @@ export const ledgerService = {
     );
   },
 
-  /** Record a coupon redemption (creds spent) */
   async recordRedemption(
     memberId:     string,
     credsSpent:   number,
@@ -85,7 +73,7 @@ export const ledgerService = {
     return record(
       memberId, "REDEEM", credsSpent, balanceAfter,
       "COUPON", couponCode,
-      `Redeemed ${credsSpent} Creds for coupon ${couponCode}`,
+      `Redeemed ${credsSpent} Creds for reward coupon`,
       { wixCouponId }
     );
   },

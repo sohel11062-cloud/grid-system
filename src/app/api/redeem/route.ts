@@ -3,22 +3,11 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-
 import { redeemMemberCreds } from "@/server/coupon-service";
-import {
-  applyCors,
-  handleRouteError,
-  optionsResponse,
-  rateLimitResponse,
-  successResponse,
-} from "@/server/http";
-import { persistSessionIfRefreshed, requireSession } from "@/server/require-session";
-import { checkRateLimit } from "@/server/rate-limiter";
 import { AppError, ErrorCode } from "@/server/errors";
-
-/** 5 redemption attempts per member per 2 minutes */
-const REDEEM_LIMIT      = 5;
-const REDEEM_WINDOW_MS  = 2 * 60 * 1000;
+import { handleRouteError, optionsResponse, rateLimitResponse, successResponse } from "@/server/http";
+import { checkRateLimit } from "@/server/rate-limiter";
+import { persistSessionIfRefreshed, requireSession } from "@/server/require-session";
 
 const redeemSchema = z.object({
   creds: z
@@ -26,55 +15,30 @@ const redeemSchema = z.object({
     .int("creds must be an integer")
     .positive("creds must be positive")
     .multipleOf(100, "creds must be a multiple of 100")
-    .max(1_000_000, "creds cannot exceed 1,000,000 per redemption"),
+    .max(1_000_000, "creds cannot exceed 1,000,000"),
 });
 
-export async function OPTIONS(request: NextRequest) {
-  return optionsResponse(request);
-}
+export async function OPTIONS(req: NextRequest) { return optionsResponse(req); }
 
 export async function POST(request: NextRequest) {
   try {
-    // ── 1. Auth ─────────────────────────────────────────────────────────
-    const authState = await requireSession(request);
-    const memberId  = authState.session.memberId;
+    const auth     = await requireSession(request);
+    const memberId = auth.session.memberId;
 
-    // ── 2. Rate limit ────────────────────────────────────────────────────
-    const rl = checkRateLimit(`redeem:${memberId}`, REDEEM_LIMIT, REDEEM_WINDOW_MS);
-    if (!rl.allowed) {
-      return rateLimitResponse(rl, request);
-    }
+    const rl = checkRateLimit(`redeem:${memberId}`, 5, 120_000);
+    if (!rl.allowed) return rateLimitResponse(rl, request);
 
-    // ── 3. Parse + validate body ─────────────────────────────────────────
-    let rawBody: unknown;
-    try {
-      rawBody = await request.json();
-    } catch {
-      throw new AppError(
-        "Request body must be valid JSON.",
-        400,
-        ErrorCode.VALIDATION_ERROR
-      );
-    }
+    let raw: unknown;
+    try { raw = await request.json(); }
+    catch { throw new AppError("Invalid JSON body.", 400, ErrorCode.VALIDATION_ERROR); }
 
-    const parsed = redeemSchema.safeParse(rawBody);
-    if (!parsed.success) {
-      const msg = parsed.error.issues.map((i) => i.message).join("; ");
-      throw new AppError(msg, 400, ErrorCode.VALIDATION_ERROR);
-    }
+    const parsed = redeemSchema.safeParse(raw);
+    if (!parsed.success)
+      throw new AppError(parsed.error.issues.map((i) => i.message).join("; "), 400, ErrorCode.VALIDATION_ERROR);
 
-    // ── 4. Execute redemption ─────────────────────────────────────────────
     const result   = await redeemMemberCreds(memberId, parsed.data.creds);
-    const response = successResponse(
-      { coupon: result.coupon, dashboard: result.dashboard },
-      200,
-      request
-    );
-
-    await persistSessionIfRefreshed(response, authState);
+    const response = successResponse({ coupon: result.coupon, dashboard: result.dashboard }, 200, request);
+    await persistSessionIfRefreshed(response, auth);
     return response;
-
-  } catch (error) {
-    return handleRouteError(error, request);
-  }
+  } catch (error) { return handleRouteError(error, request); }
 }

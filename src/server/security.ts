@@ -1,17 +1,16 @@
-import { createHash, randomBytes } from "crypto";
+import "server-only";
 
-function toBase64Url(buf: Buffer): string {
-  return buf.toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
+import { randomBytes } from "crypto";
 
-export function randomState(bytes = 32): string {
-  return toBase64Url(randomBytes(bytes));
-}
-
+/**
+ * Generate a unique coupon code in the format:
+ *   GRID-XXXXXXXX-XXXXXXXX-XXXXXXXX
+ *
+ * Uses cryptographically random bytes to minimise collision probability.
+ * With 96 bits of randomness the collision probability is negligible
+ * even at millions of coupons.
+ */
 export function createCouponCode(): string {
-  const seg = () => randomBytes(2).toString("hex").toUpperCase();
+  const seg = () => randomBytes(4).toString("hex").toUpperCase();
   return `GRID-${seg()}-${seg()}-${seg()}`;
 }

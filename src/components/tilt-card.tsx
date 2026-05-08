@@ -1,77 +1,53 @@
 "use client";
 
-import { useRef } from "react";
-import {
-  motion,
-  useMotionValue,
-  useSpring,
-  useTransform,
-  useMotionTemplate,
-} from "framer-motion";
+import { motion, useMotionValue, useSpring } from "framer-motion";
+import { type ReactNode, useRef } from "react";
 
-interface TiltCardProps {
-  children: React.ReactNode;
-  className?: string;
-  intensity?: number;
-  /** Disable tilt (e.g. on mobile) */
-  disabled?: boolean;
+interface Props {
+  children:    ReactNode;
+  intensity?:  number;
+  className?:  string;
 }
 
-export function TiltCard({
-  children,
-  className = "",
-  intensity = 7,
-  disabled = false,
-}: TiltCardProps) {
-  const ref  = useRef<HTMLDivElement>(null);
-  const rawX = useMotionValue(0.5);
-  const rawY = useMotionValue(0.5);
+export function TiltCard({ children, intensity = 7, className = "" }: Props) {
+  const ref = useRef<HTMLDivElement>(null);
 
-  const springCfg = { stiffness: 140, damping: 22, mass: 0.55 };
-  const x = useSpring(rawX, springCfg);
-  const y = useSpring(rawY, springCfg);
-
-  const rotateY = useTransform(x, [0, 1], [-intensity, intensity]);
-  const rotateX = useTransform(y, [0, 1], [intensity, -intensity]);
-
-  const spotX = useTransform(x, [0, 1], ["0%", "100%"]);
-  const spotY = useTransform(y, [0, 1], ["0%", "100%"]);
-  const spot  = useMotionTemplate`radial-gradient(200px circle at ${spotX} ${spotY}, rgba(77,247,255,0.08), transparent 70%)`;
+  const rotX = useSpring(useMotionValue(0), { stiffness: 280, damping: 28 });
+  const rotY = useSpring(useMotionValue(0), { stiffness: 280, damping: 28 });
+  const spotX = useMotionValue(50);
+  const spotY = useMotionValue(50);
 
   function onMove(e: React.MouseEvent<HTMLDivElement>) {
-    if (disabled || !ref.current) return;
-    const r = ref.current.getBoundingClientRect();
-    rawX.set((e.clientX - r.left) / r.width);
-    rawY.set((e.clientY - r.top) / r.height);
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = (e.clientX - rect.left) / rect.width;
+    const cy = (e.clientY - rect.top)  / rect.height;
+    rotY.set((cx - 0.5) *  intensity * 2);
+    rotX.set((cy - 0.5) * -intensity * 2);
+    spotX.set(cx * 100);
+    spotY.set(cy * 100);
   }
 
   function onLeave() {
-    rawX.set(0.5);
-    rawY.set(0.5);
-  }
-
-  if (disabled) {
-    return <div className={`panel-shell ${className}`}>{children}</div>;
+    rotX.set(0); rotY.set(0);
+    spotX.set(50); spotY.set(50);
   }
 
   return (
     <motion.div
       ref={ref}
+      className={`panel-shell ${className}`}
+      style={{ rotateX: rotX, rotateY: rotY, transformStyle: "preserve-3d", transformPerspective: 800 }}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
-      style={{
-        rotateX,
-        rotateY,
-        transformPerspective: 1000,
-        transformStyle: "preserve-3d",
-      }}
-      whileHover={{ scale: 1.012 }}
-      transition={{ scale: { duration: 0.3, ease: [0.22, 1, 0.36, 1] } }}
-      className={`panel-shell ${className}`}
     >
+      {/* Subtle cursor spotlight */}
       <motion.div
-        className="pointer-events-none absolute inset-0 rounded-[26px]"
-        style={{ background: spot }}
+        className="pointer-events-none absolute inset-0 rounded-[28px] opacity-0 transition-opacity duration-300 hover:opacity-100"
+        style={{
+          background: `radial-gradient(200px circle at ${spotX.get()}% ${spotY.get()}%, rgba(77,247,255,0.06), transparent 60%)`,
+        }}
+        whileHover={{ opacity: 1 }}
       />
       {children}
     </motion.div>
