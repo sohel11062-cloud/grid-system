@@ -127,7 +127,7 @@ function extractCouponCode(order: WixOrder): string | null {
   const fromApplied = order.appliedCoupon?.code?.trim();
   if (fromApplied) return fromApplied;
 
-  const raw = order as Record<string, unknown>;
+  const raw = order as unknown as Record<string, unknown>;
   if (typeof raw.appliedCouponCode === "string" && raw.appliedCouponCode.trim())
     return raw.appliedCouponCode.trim();
 
