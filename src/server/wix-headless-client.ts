@@ -131,7 +131,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<WixToken
     throw new AppError(MSG.SESSION_EXPIRED, 401, ErrorCode.SESSION_EXPIRED);
   }
 
-  return json as WixTokenResponse;
+  return json as unknown as WixTokenResponse;
 }
 
 // ─── Get authenticated member via member's own access token ──────────────────
