@@ -75,7 +75,7 @@ export async function exchangeCodeForTokens(params: {
 
   let response: Response;
   try {
-    response = await fetch("https://www.wix.com/oauth/access", {
+    response = await fetch("https://www.wixapis.com/oauth2/token", {
       method:  "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body:    body.toString(),
@@ -112,7 +112,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<WixToken
 
   let response: Response;
   try {
-    response = await fetch("https://www.wix.com/oauth/access", {
+    response = await fetch("https://www.wixapis.com/oauth2/token", {
       method:  "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body:    body.toString(),
@@ -147,7 +147,7 @@ export async function getAuthenticatedMember(accessToken: string): Promise<WixMe
       {
         method:  "GET",
         headers: {
-          "Authorization": accessToken,
+          "Authorization": `Bearer ${accessToken}`,
           "Content-Type":  "application/json",
         },
         signal: controller.signal,
