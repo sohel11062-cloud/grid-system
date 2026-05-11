@@ -42,7 +42,7 @@ export function buildLoginUrl(params: {
   redirectUri:   string;
 }): string {
   const env = getEnv();
-  const url = new URL("https://www.wix.com/oauth/access");
+  const url = new URL("https://users.wix.com/signin");
   url.searchParams.set("client_id",              env.WIX_CLIENT_ID);
   url.searchParams.set("response_type",          "code");
   url.searchParams.set("redirect_uri",           params.redirectUri);
