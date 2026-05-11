@@ -94,7 +94,7 @@ export async function exchangeCodeForTokens(params: {
     throw new AppError(MSG.INTERNAL_ERROR, response.status, ErrorCode.WIX_API_ERROR);
   }
 
-  return json as WixTokenResponse;
+  return json as unknown as WixTokenResponse;
 }
 
 // ─── Token refresh ────────────────────────────────────────────────────────────
