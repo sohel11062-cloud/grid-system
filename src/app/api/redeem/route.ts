@@ -2,11 +2,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
-import { z } from "zod";
+import { z }           from "zod";
 import { redeemMemberCreds } from "@/server/coupon-service";
 import { AppError, ErrorCode } from "@/server/errors";
-import { handleRouteError, optionsResponse, rateLimitResponse, successResponse } from "@/server/http";
-import { checkRateLimit } from "@/server/rate-limiter";
+import {
+  handleRouteError,
+  optionsResponse,
+  rateLimitResponse,
+  successResponse,
+} from "@/server/http";
+import { checkRateLimit }             from "@/server/rate-limiter";
 import { persistSessionIfRefreshed, requireSession } from "@/server/require-session";
 
 const redeemSchema = z.object({
@@ -33,11 +38,20 @@ export async function POST(request: NextRequest) {
     catch { throw new AppError("Invalid JSON body.", 400, ErrorCode.VALIDATION_ERROR); }
 
     const parsed = redeemSchema.safeParse(raw);
-    if (!parsed.success)
-      throw new AppError(parsed.error.issues.map((i) => i.message).join("; "), 400, ErrorCode.VALIDATION_ERROR);
+    if (!parsed.success) {
+      throw new AppError(
+        parsed.error.issues.map((i) => i.message).join("; "),
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
 
     const result   = await redeemMemberCreds(memberId, parsed.data.creds);
-    const response = successResponse({ coupon: result.coupon, dashboard: result.dashboard }, 200, request);
+    const response = successResponse(
+      { coupon: result.coupon, dashboard: result.dashboard },
+      200,
+      request,
+    );
     await persistSessionIfRefreshed(response, auth);
     return response;
   } catch (error) { return handleRouteError(error, request); }

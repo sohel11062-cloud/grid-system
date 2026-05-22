@@ -27,7 +27,7 @@ export class AppError extends Error {
     message:  string,
     status    = 500,
     code:     ErrorCode = ErrorCode.INTERNAL_ERROR,
-    details?: unknown
+    details?: unknown,
   ) {
     super(message);
     this.name    = "AppError";
@@ -40,7 +40,9 @@ export class AppError extends Error {
 
 export function toAppError(error: unknown): AppError {
   if (error instanceof AppError) return error;
-  if (error instanceof Error)    return new AppError(error.message, 500, ErrorCode.INTERNAL_ERROR);
-  if (typeof error === "string") return new AppError(error,         500, ErrorCode.INTERNAL_ERROR);
+  if (error instanceof Error)
+    return new AppError(error.message, 500, ErrorCode.INTERNAL_ERROR);
+  if (typeof error === "string")
+    return new AppError(error, 500, ErrorCode.INTERNAL_ERROR);
   return new AppError("An unexpected error occurred.", 500, ErrorCode.INTERNAL_ERROR);
 }

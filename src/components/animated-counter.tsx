@@ -9,7 +9,7 @@ interface Props {
 }
 
 export function AnimatedCounter({ value, duration = 1100, formatter }: Props) {
-  const [display, setDisplay]   = useState(value);
+  const [display, setDisplay] = useState(value);
   const prevRef    = useRef(value);
   const rafRef     = useRef<number | null>(null);
   const startTsRef = useRef<number | null>(null);
@@ -36,7 +36,9 @@ export function AnimatedCounter({ value, duration = 1100, formatter }: Props) {
     };
 
     rafRef.current = requestAnimationFrame(step);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [value, duration]);
 
   return <>{formatter ? formatter(display) : display.toLocaleString("en-IN")}</>;

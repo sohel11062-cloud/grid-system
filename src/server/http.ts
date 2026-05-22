@@ -1,10 +1,15 @@
 import "server-only";
 
 import { NextRequest, NextResponse } from "next/server";
-import { toAppError, ErrorCode } from "@/server/errors";
-import type { RateLimitResult } from "@/server/rate-limiter";
+import { toAppError, ErrorCode }     from "@/server/errors";
+import type { RateLimitResult }      from "@/server/rate-limiter";
 
-export function applyCors(response: NextResponse, request: NextRequest): NextResponse {
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+
+export function applyCors(
+  response: NextResponse,
+  request:  NextRequest,
+): NextResponse {
   const origin = request.headers.get("origin");
   if (origin) {
     response.headers.set("Access-Control-Allow-Origin",      origin);
@@ -21,6 +26,8 @@ export function optionsResponse(request: NextRequest): NextResponse {
   return applyCors(response, request);
 }
 
+// ─── Security headers ─────────────────────────────────────────────────────────
+
 export function applySecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options",        "DENY");
@@ -29,10 +36,12 @@ export function applySecurityHeaders(response: NextResponse): NextResponse {
   return response;
 }
 
+// ─── Success response ─────────────────────────────────────────────────────────
+
 export function successResponse(
-  data:    Record<string, unknown>,
-  status   = 200,
-  request?: NextRequest
+  data:     Record<string, unknown>,
+  status    = 200,
+  request?: NextRequest,
 ): NextResponse {
   const response = NextResponse.json({ success: true, ...data }, { status });
   applySecurityHeaders(response);
@@ -40,9 +49,11 @@ export function successResponse(
   return response;
 }
 
+// ─── Error response ───────────────────────────────────────────────────────────
+
 export function handleRouteError(
   error:    unknown,
-  request?: NextRequest
+  request?: NextRequest,
 ): NextResponse {
   const appErr = toAppError(error);
 
@@ -56,26 +67,34 @@ export function handleRouteError(
 
   const response = NextResponse.json(
     { success: false, error: appErr.message, code: appErr.code },
-    { status: appErr.status }
+    { status: appErr.status },
   );
-
   applySecurityHeaders(response);
   if (request) applyCors(response, request);
   return response;
 }
 
+// ─── Rate-limit response ──────────────────────────────────────────────────────
+
 export function rateLimitResponse(
   result:   RateLimitResult,
-  request?: NextRequest
+  request?: NextRequest,
 ): NextResponse {
-  const retryAfterSec = Math.ceil((result.resetAtMs - Date.now()) / 1000);
+  const retryAfterSec = Math.ceil((result.resetAtMs - Date.now()) / 1_000);
   const response = NextResponse.json(
-    { success: false, error: "Too many requests. Please slow down.", code: ErrorCode.RATE_LIMITED },
-    { status: 429 }
+    {
+      success: false,
+      error:   "Too many requests. Please slow down.",
+      code:    ErrorCode.RATE_LIMITED,
+    },
+    { status: 429 },
   );
-  response.headers.set("Retry-After",          String(Math.max(retryAfterSec, 1)));
-  response.headers.set("X-RateLimit-Remaining","0");
-  response.headers.set("X-RateLimit-Reset",    String(Math.ceil(result.resetAtMs / 1000)));
+  response.headers.set("Retry-After",           String(Math.max(retryAfterSec, 1)));
+  response.headers.set("X-RateLimit-Remaining", "0");
+  response.headers.set(
+    "X-RateLimit-Reset",
+    String(Math.ceil(result.resetAtMs / 1_000)),
+  );
   applySecurityHeaders(response);
   if (request) applyCors(response, request);
   return response;

@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams }             from "next/navigation";
 
 function CallbackInner() {
   const router  = useRouter();
@@ -20,8 +20,12 @@ function CallbackInner() {
 
     if (error || !code || !state) {
       setIsError(true);
-      setMsg(error ? "Authentication cancelled." : "Missing parameters. Please try again.");
-      setTimeout(() => router.replace("/"), 2500);
+      setMsg(
+        error
+          ? "Authentication cancelled."
+          : "Missing parameters. Please try again.",
+      );
+      setTimeout(() => router.replace("/"), 2_500);
       return;
     }
 
@@ -31,7 +35,14 @@ function CallbackInner() {
       headers:     { "Content-Type": "application/json" },
       body:        JSON.stringify({ code, state }),
     })
-      .then((r) => r.json() as Promise<{ success: boolean; returnTo?: string; error?: string }>)
+      .then(
+        (r) =>
+          r.json() as Promise<{
+            success:   boolean;
+            returnTo?: string;
+            error?:    string;
+          }>,
+      )
       .then((data) => {
         if (data.success) {
           setMsg("Access granted. Entering the Grid…");
@@ -39,27 +50,37 @@ function CallbackInner() {
         } else {
           setIsError(true);
           setMsg(data.error ?? "Authentication failed.");
-          setTimeout(() => router.replace("/"), 2500);
+          setTimeout(() => router.replace("/"), 2_500);
         }
       })
       .catch(() => {
         setIsError(true);
         setMsg("Authentication error. Please try again.");
-        setTimeout(() => router.replace("/"), 2500);
+        setTimeout(() => router.replace("/"), 2_500);
       });
   }, [params, router]);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-grid-bg px-6">
       <div className="w-full max-w-sm text-center">
-        <p className="text-[10px] uppercase tracking-[0.42em] text-grid-cyan/70">THE GRID</p>
-        <h1 className="mt-4 text-xl uppercase tracking-[0.2em] text-white">Auth Gateway</h1>
+        <p className="text-[10px] uppercase tracking-[0.42em] text-grid-cyan/70">
+          THE GRID
+        </p>
+        <h1 className="mt-4 text-xl uppercase tracking-[0.2em] text-white">
+          Auth Gateway
+        </h1>
+
         <div className="progress-track mx-auto mt-8 w-48">
           <div className="progress-fill animate-pulseLine w-full">
             <span className="progress-orb" />
           </div>
         </div>
-        <p className={`mt-6 text-sm ${isError ? "text-red-400" : "text-grid-muted"}`}>{msg}</p>
+
+        <p
+          className={`mt-6 text-sm ${isError ? "text-red-400" : "text-grid-muted"}`}
+        >
+          {msg}
+        </p>
       </div>
     </main>
   );
@@ -67,11 +88,13 @@ function CallbackInner() {
 
 export default function AuthCallbackPage() {
   return (
-    <Suspense fallback={
-      <main className="flex min-h-screen items-center justify-center bg-grid-bg">
-        <p className="text-sm text-grid-muted">Loading…</p>
-      </main>
-    }>
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-grid-bg">
+          <p className="text-sm text-grid-muted">Loading…</p>
+        </main>
+      }
+    >
       <CallbackInner />
     </Suspense>
   );

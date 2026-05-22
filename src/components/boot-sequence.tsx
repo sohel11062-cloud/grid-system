@@ -15,9 +15,9 @@ const LINES = [
 interface Props { onComplete: () => void; }
 
 export function BootSequence({ onComplete }: Props) {
-  const [lines, setLines]     = useState<string[]>([]);
+  const [lines, setLines]       = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
-  const [exiting, setExiting] = useState(false);
+  const [exiting, setExiting]   = useState(false);
   const ran = useRef(false);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export function BootSequence({ onComplete }: Props) {
     ran.current = true;
 
     let idx = 0;
-    const interval = 460;
+    const INTERVAL = 460;
 
     const id = setInterval(() => {
       if (idx < LINES.length) {
@@ -39,7 +39,7 @@ export function BootSequence({ onComplete }: Props) {
           setTimeout(onComplete, 420);
         }, 250);
       }
-    }, interval);
+    }, INTERVAL);
 
     return () => clearInterval(id);
   }, [onComplete]);
@@ -52,7 +52,6 @@ export function BootSequence({ onComplete }: Props) {
           initial={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { duration: 0.42 } }}
         >
-          {/* Scan line */}
           <div className="boot-scan-line" aria-hidden />
 
           <div className="w-full max-w-lg px-8">
@@ -70,9 +69,14 @@ export function BootSequence({ onComplete }: Props) {
                   initial={{ opacity: 0, x: -6 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.18 }}
-                  className={i === lines.length - 1 ? "text-grid-cyan" : "text-grid-muted/60"}
+                  className={
+                    i === lines.length - 1
+                      ? "text-grid-cyan"
+                      : "text-grid-muted/60"
+                  }
                 >
-                  <span className="mr-2 text-grid-cyan/40">›</span>{line}
+                  <span className="mr-2 text-grid-cyan/40">›</span>
+                  {line}
                 </motion.p>
               ))}
             </div>

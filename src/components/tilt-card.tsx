@@ -1,17 +1,16 @@
 "use client";
 
 import { motion, useMotionValue, useSpring } from "framer-motion";
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, useRef }             from "react";
 
 interface Props {
-  children:    ReactNode;
-  intensity?:  number;
-  className?:  string;
+  children:   ReactNode;
+  intensity?: number;
+  className?: string;
 }
 
 export function TiltCard({ children, intensity = 7, className = "" }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
-
+  const ref  = useRef<HTMLDivElement>(null);
   const rotX = useSpring(useMotionValue(0), { stiffness: 280, damping: 28 });
   const rotY = useSpring(useMotionValue(0), { stiffness: 280, damping: 28 });
   const spotX = useMotionValue(50);
@@ -29,19 +28,26 @@ export function TiltCard({ children, intensity = 7, className = "" }: Props) {
   }
 
   function onLeave() {
-    rotX.set(0); rotY.set(0);
-    spotX.set(50); spotY.set(50);
+    rotX.set(0);
+    rotY.set(0);
+    spotX.set(50);
+    spotY.set(50);
   }
 
   return (
     <motion.div
       ref={ref}
       className={`panel-shell ${className}`}
-      style={{ rotateX: rotX, rotateY: rotY, transformStyle: "preserve-3d", transformPerspective: 800 }}
+      style={{
+        rotateX:          rotX,
+        rotateY:          rotY,
+        transformStyle:   "preserve-3d",
+        transformPerspective: 800,
+      }}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
     >
-      {/* Subtle cursor spotlight */}
+      {/* Cursor spotlight */}
       <motion.div
         className="pointer-events-none absolute inset-0 rounded-[28px] opacity-0 transition-opacity duration-300 hover:opacity-100"
         style={{

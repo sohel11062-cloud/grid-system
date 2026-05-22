@@ -8,7 +8,8 @@ declare global {
 }
 
 function getStore(): Map<string, Entry> {
-  if (!global.__GRID_RATE_STORE__) global.__GRID_RATE_STORE__ = new Map();
+  if (!global.__GRID_RATE_STORE__)
+    global.__GRID_RATE_STORE__ = new Map();
   return global.__GRID_RATE_STORE__;
 }
 
@@ -35,7 +36,7 @@ export interface RateLimitResult {
 export function checkRateLimit(
   key:      string,
   limit:    number,
-  windowMs: number
+  windowMs: number,
 ): RateLimitResult {
   const store = getStore();
   maybeGC(store, windowMs);

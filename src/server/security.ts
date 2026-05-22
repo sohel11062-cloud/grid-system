@@ -3,14 +3,12 @@ import "server-only";
 import { randomBytes } from "crypto";
 
 /**
- * Generate a unique coupon code in the format:
- *   GRID-XXXXXXXX-XXXXXXXX-XXXXXXXX
+ * Generates a unique, cryptographically random coupon code.
  *
- * Uses cryptographically random bytes to minimise collision probability.
- * With 96 bits of randomness the collision probability is negligible
- * even at millions of coupons.
+ * Format:  GRID-XXXXXXXX-XXXXXXXX-XXXXXXXX
+ * Entropy: 96 bits — collision probability is negligible at millions of codes.
  */
 export function createCouponCode(): string {
-  const seg = () => randomBytes(4).toString("hex").toUpperCase();
+  const seg = (): string => randomBytes(4).toString("hex").toUpperCase();
   return `GRID-${seg()}-${seg()}-${seg()}`;
 }

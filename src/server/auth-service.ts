@@ -3,24 +3,18 @@ import "server-only";
 import { getEnv } from "@/server/env";
 import { AppError, ErrorCode } from "@/server/errors";
 import { MSG } from "@/server/brand";
-
 import {
   exchangeCodeForWixTokens,
   generateOAuthLoginData,
   getAuthenticatedMember,
   refreshWixTokens,
 } from "@/server/wix-headless-client";
-
-import type {
-  GridOAuthState,
-  GridRefreshTokenRole,
-  GridSession,
-} from "@/server/session";
+import type { GridOAuthState, GridRefreshTokenRole, GridSession } from "@/server/session";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface AuthState {
-  session: GridSession;
+  session:   GridSession;
   refreshed: boolean;
 }
 
@@ -35,25 +29,23 @@ export async function startLoginFlow(
 
   const { APP_URL } = getEnv();
 
-  // IMPORTANT:
-  // MUST match Wix dashboard EXACTLY
   const redirectUri =
     `${APP_URL}/auth/callback`;
 
-  // Where user should land AFTER auth
   const originalUri =
     returnTo ?? "/";
 
-  // Generate Wix OAuth login URL + PKCE data
+  // IMPORTANT:
+  // MUST await async Wix SDK auth generation
   const { oauthData, loginUrl } =
     await generateOAuthLoginData(
       redirectUri,
       originalUri
     );
 
-  // Persist ALL PKCE state server-side in encrypted cookie
   const oauthState: GridOAuthState = {
-    state: oauthData.state,
+    state:
+      oauthData.state,
 
     codeChallenge:
       oauthData.codeChallenge,
@@ -61,11 +53,11 @@ export async function startLoginFlow(
     codeVerifier:
       oauthData.codeVerifier,
 
-    // IMPORTANT:
-    // use OUR OWN values
-    redirectUri,
+    redirectUri:
+      oauthData.redirectUri,
 
-    originalUri,
+    originalUri:
+      oauthData.originalUri,
 
     createdAt:
       new Date().toISOString(),
@@ -77,167 +69,110 @@ export async function startLoginFlow(
   };
 }
 
-// ─── Exchange auth code for encrypted session ────────────────────────────────
+// ─── Exchange auth code for an encrypted session ──────────────────────────────
 
+/**
+ * Called from `POST /api/auth/exchange` after Wix redirects back with
+ * `?code=…&state=…`.
+ *
+ * 1. Validates the `state` against the cookie to prevent CSRF.
+ * 2. Calls the Wix SDK to exchange the code for tokens (PKCE-verified).
+ * 3. Fetches the authenticated member's profile.
+ * 4. Returns a `GridSession` ready to be encrypted into an httpOnly cookie.
+ */
 export async function exchangeCodeForSession(params: {
-  code: string;
-  state: string;
+  code:       string;
+  state:      string;
   oauthState: GridOAuthState | null;
 }): Promise<GridSession> {
-
-  const {
-    code,
-    state,
-    oauthState,
-  } = params;
+  const { code, state, oauthState } = params;
 
   if (!oauthState) {
     throw new AppError(
-      "OAuth state cookie not found. Please sign in again.",
+      "OAuth state cookie not found. The session may have expired — please sign in again.",
       400,
-      ErrorCode.VALIDATION_ERROR
+      ErrorCode.VALIDATION_ERROR,
     );
   }
 
-  // CSRF protection
+  // CSRF guard — `state` in the URL must match what we stored in the cookie.
   if (state !== oauthState.state) {
     throw new AppError(
-      "OAuth state mismatch. Please restart login.",
+      "OAuth state mismatch — possible CSRF attempt. Please restart the login flow.",
       400,
-      ErrorCode.VALIDATION_ERROR
+      ErrorCode.VALIDATION_ERROR,
     );
   }
 
-  // Exchange code → Wix tokens
-  const tokens =
-    await exchangeCodeForWixTokens(
-      code,
-      oauthState
-    );
+  // Exchange the auth code for Wix member tokens (PKCE-verified via codeVerifier).
+  const tokens = await exchangeCodeForWixTokens(code, oauthState);
 
-  // Fetch member profile
-  const member =
-    await getAuthenticatedMember(tokens);
+  // Fetch the member profile using the freshly obtained access token.
+  const member  = await getAuthenticatedMember(tokens);
+  const now     = new Date().toISOString();
 
-  const now =
-    new Date().toISOString();
-
-  // Display name fallback chain
+  // Resolve a display name with graceful fallbacks.
   const username =
-    member.profile.nickname?.trim() ||
-
-    [
-      member.contact.firstName,
-      member.contact.lastName,
-    ]
-      .filter(
-        (s): s is string =>
-          typeof s === "string" &&
-          s.trim().length > 0
-      )
-      .join(" ") ||
-
-    member.loginEmail
-      .split("@")[0]
-      ?.trim() ||
-
+    member.profile.nickname?.trim()                                              ||
+    [member.contact.firstName, member.contact.lastName]
+      .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+      .join(" ")                                                                  ||
+    member.loginEmail.split("@")[0]?.trim()                                      ||
     "GRID_USER";
 
   const session: GridSession = {
-    memberId:
-      member.id,
-
-    contactId:
-      member.contactId,
-
-    email:
-      member.loginEmail,
-
+    memberId:             member.id,
+    contactId:            member.contactId,
+    email:                member.loginEmail,
     username,
-
-    accessToken:
-      tokens.accessToken.value,
-
-    refreshToken:
-      tokens.refreshToken.value,
-
-    refreshTokenRole:
-      "member" satisfies GridRefreshTokenRole,
-
-    accessTokenExpiresAt:
-      new Date(
-        tokens.accessToken.expiresAt
-      ).toISOString(),
-
-    createdAt:
-      now,
+    accessToken:          tokens.accessToken.value,
+    refreshToken:         tokens.refreshToken.value,
+    // Members always get the MEMBER role; store it explicitly for the refresh flow.
+    refreshTokenRole:     "member" satisfies GridRefreshTokenRole,
+    accessTokenExpiresAt: new Date(tokens.accessToken.expiresAt).toISOString(),
+    createdAt:            now,
   };
 
   return session;
 }
 
-// ─── Refresh session if access token is expiring ─────────────────────────────
+// ─── Refresh the session if the access token is near expiry ───────────────────
 
+/**
+ * Transparently refreshes the Wix access token when it is within 5 minutes
+ * of expiry.  Returns the (possibly refreshed) session and a flag indicating
+ * whether the cookie needs to be rewritten.
+ *
+ * On refresh failure the original session is returned unchanged so the next
+ * API call fails with a 401 rather than logging the user out proactively.
+ */
 export async function refreshSessionIfNeeded(
-  session: GridSession
+  session: GridSession,
 ): Promise<AuthState> {
+  const expiresAtMs = new Date(session.accessTokenExpiresAt).getTime();
+  const fiveMinMs   = 5 * 60 * 1_000;
 
-  const expiresAtMs =
-    new Date(
-      session.accessTokenExpiresAt
-    ).getTime();
-
-  const fiveMinMs =
-    5 * 60 * 1000;
-
-  // Still valid
   if (Date.now() < expiresAtMs - fiveMinMs) {
-    return {
-      session,
-      refreshed: false,
-    };
+    return { session, refreshed: false };
   }
 
   try {
-
-    const tokens =
-      await refreshWixTokens(
-        session.refreshToken
-      );
+    const tokens = await refreshWixTokens(session.refreshToken);
 
     const refreshed: GridSession = {
       ...session,
-
-      accessToken:
-        tokens.accessToken.value,
-
-      refreshToken:
-        tokens.refreshToken.value ||
-        session.refreshToken,
-
-      refreshTokenRole:
-        "member" satisfies GridRefreshTokenRole,
-
-      accessTokenExpiresAt:
-        new Date(
-          tokens.accessToken.expiresAt
-        ).toISOString(),
+      accessToken:          tokens.accessToken.value,
+      // Use the new refresh token when Wix issues one; fall back to the existing one.
+      refreshToken:         tokens.refreshToken.value || session.refreshToken,
+      refreshTokenRole:     "member" satisfies GridRefreshTokenRole,
+      accessTokenExpiresAt: new Date(tokens.accessToken.expiresAt).toISOString(),
     };
 
-    return {
-      session: refreshed,
-      refreshed: true,
-    };
-
+    return { session: refreshed, refreshed: true };
   } catch {
-
-    console.warn(
-      "[GRID_AUTH] Token refresh failed"
-    );
-
-    return {
-      session,
-      refreshed: false,
-    };
+    // Refresh failed — return the original session.
+    // The next protected API call will surface a 401 if the token has truly expired.
+    console.warn("[GRID_AUTH] Token refresh failed — continuing with existing session.");
+    return { session, refreshed: false };
   }
 }

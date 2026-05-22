@@ -1,15 +1,15 @@
 {
   "crons": [
     {
-      "path": "/api/cron/sync",
+      "path":     "/api/cron/sync",
       "schedule": "0 2 * * *"
     },
     {
-      "path": "/api/reports/weekly",
+      "path":     "/api/reports/weekly",
       "schedule": "0 0 * * 0"
     },
     {
-      "path": "/api/reconcile",
+      "path":     "/api/reconcile",
       "schedule": "0 3 * * *"
     }
   ],

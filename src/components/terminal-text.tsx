@@ -9,7 +9,12 @@ interface Props {
   className?: string;
 }
 
-export function TerminalText({ text, speed = 38, delay = 0, className = "" }: Props) {
+export function TerminalText({
+  text,
+  speed     = 38,
+  delay     = 0,
+  className = "",
+}: Props) {
   const [displayed, setDisplayed] = useState("");
   const [done, setDone]           = useState(false);
 
@@ -22,7 +27,10 @@ export function TerminalText({ text, speed = 38, delay = 0, className = "" }: Pr
       const id = setInterval(() => {
         i++;
         setDisplayed(text.slice(0, i));
-        if (i >= text.length) { clearInterval(id); setDone(true); }
+        if (i >= text.length) {
+          clearInterval(id);
+          setDone(true);
+        }
       }, speed);
       return () => clearInterval(id);
     }, delay);
@@ -33,8 +41,12 @@ export function TerminalText({ text, speed = 38, delay = 0, className = "" }: Pr
   return (
     <span className={className}>
       {displayed}
-      <span className={`inline-block w-[2px] align-middle bg-current ${done ? "animate-terminalBlink" : ""}`}
-        style={{ height: "0.85em", marginLeft: "1px" }} />
+      <span
+        className={`inline-block w-[2px] align-middle bg-current ${
+          done ? "animate-terminalBlink" : ""
+        }`}
+        style={{ height: "0.85em", marginLeft: "1px" }}
+      />
     </span>
   );
 }

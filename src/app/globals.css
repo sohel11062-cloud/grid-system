@@ -4,11 +4,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Base ─────────────────────────────────────────────────────────────────── */
+/* ─── CSS custom properties ─────────────────────────────────────────────────── */
 
 :root {
   --grid-bg:      #04050a;
-  --grid-panel:   rgba(8,10,20,0.82);
+  --grid-panel:   rgba(8, 10, 20, 0.82);
   --grid-cyan:    #4df7ff;
   --grid-blue:    #3b82f6;
   --grid-violet:  #a78bfa;
@@ -18,83 +18,74 @@
   --grid-muted:   #64748b;
 }
 
-* {
-  box-sizing: border-box;
-}
+/* ─── Base reset ─────────────────────────────────────────────────────────────── */
 
+*          { box-sizing: border-box; }
 html, body {
-  background: var(--grid-bg);
-  color:      var(--grid-text);
-  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
-  -webkit-font-smoothing: antialiased;
-  scroll-behavior: smooth;
-  overscroll-behavior: none;
+  background:              var(--grid-bg);
+  color:                   var(--grid-text);
+  font-family:             "JetBrains Mono", "Fira Code", Consolas, monospace;
+  -webkit-font-smoothing:  antialiased;
+  scroll-behavior:         smooth;
+  overscroll-behavior:     none;
 }
 
 ::selection {
   background: rgba(77, 247, 255, 0.22);
-  color: #fff;
+  color:      #fff;
 }
 
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar       { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(77, 247, 255, 0.28);
+  background:    rgba(77, 247, 255, 0.28);
   border-radius: 4px;
 }
 
-/* ─── Panel shell ──────────────────────────────────────────────────────────── */
+/* ─── Panel shell ────────────────────────────────────────────────────────────── */
 
 .panel-shell {
   @apply relative rounded-[28px] border border-white/10 bg-[rgba(8,10,20,0.82)] p-6 backdrop-blur-xl;
   box-shadow:
-    0 0 0 1px rgba(77,247,255,0.06),
-    0 24px 64px rgba(0,0,0,0.55),
-    inset 0 1px 0 rgba(255,255,255,0.06);
+    0 0 0 1px rgba(77, 247, 255, 0.06),
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
-/* ─── Corner decorators ─────────────────────────────────────────────────────  */
-
+/* corner decorators */
 .panel-shell::before,
 .panel-shell::after {
-  content: "";
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-color: rgba(77,247,255,0.35);
-  border-style: solid;
+  content:       "";
+  position:      absolute;
+  width:         10px;
+  height:        10px;
+  border-color:  rgba(77, 247, 255, 0.35);
+  border-style:  solid;
 }
-
 .panel-shell::before {
   top: 8px; left: 8px;
-  border-width: 1.5px 0 0 1.5px;
+  border-width:  1.5px 0 0 1.5px;
   border-radius: 2px 0 0 0;
 }
-
 .panel-shell::after {
   bottom: 8px; right: 8px;
-  border-width: 0 1.5px 1.5px 0;
+  border-width:  0 1.5px 1.5px 0;
   border-radius: 0 0 2px 0;
 }
 
-/* ─── Typography ────────────────────────────────────────────────────────────  */
+/* ─── Typography helpers ─────────────────────────────────────────────────────── */
 
-.panel-title {
-  @apply text-[10px] uppercase tracking-[0.38em] text-grid-cyan/70;
-}
+.panel-title  { @apply text-[10px] uppercase tracking-[0.38em] text-grid-cyan/70; }
+.panel-kicker { @apply text-[9px]  uppercase tracking-[0.42em] text-grid-muted; }
 
-.panel-kicker {
-  @apply text-[9px] uppercase tracking-[0.42em] text-grid-muted;
-}
-
-/* ─── Data chip ─────────────────────────────────────────────────────────────  */
+/* ─── Data chip ──────────────────────────────────────────────────────────────── */
 
 .data-chip {
   @apply inline-flex items-center rounded-full border border-white/10 bg-white/5
          px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-grid-muted;
 }
 
-/* ─── Buttons ───────────────────────────────────────────────────────────────  */
+/* ─── Buttons ────────────────────────────────────────────────────────────────── */
 
 .grid-button {
   @apply relative overflow-hidden rounded-full border border-grid-cyan/40
@@ -104,16 +95,18 @@ html, body {
          hover:border-grid-cyan/70 hover:from-grid-cyan/25 hover:to-grid-blue/25
          disabled:cursor-not-allowed disabled:opacity-40;
 }
-
 .grid-button::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at var(--x,50%) var(--y,50%), rgba(77,247,255,0.18) 0%, transparent 60%);
-  opacity: 0;
+  content:    "";
+  position:   absolute;
+  inset:      0;
+  background: radial-gradient(
+    circle at var(--x, 50%) var(--y, 50%),
+    rgba(77, 247, 255, 0.18) 0%,
+    transparent 60%
+  );
+  opacity:    0;
   transition: opacity 0.2s;
 }
-
 .grid-button:hover::after { opacity: 1; }
 
 .grid-button-ghost {
@@ -124,7 +117,7 @@ html, body {
          disabled:cursor-not-allowed disabled:opacity-40;
 }
 
-/* ─── Input ─────────────────────────────────────────────────────────────────  */
+/* ─── Input ──────────────────────────────────────────────────────────────────── */
 
 .grid-input {
   @apply w-full rounded-2xl border border-white/15 bg-black/20
@@ -134,87 +127,131 @@ html, body {
          transition-all duration-200;
 }
 
-/* ─── Progress bar ──────────────────────────────────────────────────────────  */
+/* ─── Progress bar ───────────────────────────────────────────────────────────── */
 
 .progress-track {
   @apply relative h-1.5 w-full overflow-hidden rounded-full bg-white/10;
 }
-
 .progress-fill {
   @apply absolute inset-y-0 left-0 rounded-full
          bg-gradient-to-r from-grid-cyan/80 via-grid-blue/80 to-grid-violet/80;
   animation: progressGlow 2s ease-in-out infinite;
 }
-
 .progress-orb {
   @apply absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 translate-x-1/2
          rounded-full bg-grid-cyan shadow-[0_0_12px_#4df7ff];
 }
 
-/* ─── Status dots ───────────────────────────────────────────────────────────  */
+/* ─── Status dots ────────────────────────────────────────────────────────────── */
 
 .status-dot-online {
   @apply h-2 w-2 rounded-full bg-emerald-400;
   animation: statusPulse 2s ease-in-out infinite;
   box-shadow: 0 0 6px #34d399;
 }
-
 .status-dot-syncing {
   @apply h-2 w-2 rounded-full bg-amber-400;
   animation: statusPulse 1s ease-in-out infinite;
   box-shadow: 0 0 6px #fbbf24;
 }
-
 .status-dot-degraded {
   @apply h-2 w-2 rounded-full bg-red-400;
   animation: statusPulse 1.5s ease-in-out infinite;
   box-shadow: 0 0 6px #f87171;
 }
 
-/* ─── Glitch text ───────────────────────────────────────────────────────────  */
+/* ─── Glitch text ────────────────────────────────────────────────────────────── */
 
-.glitch-text {
-  position: relative;
-}
-
+.glitch-text { position: relative; }
 .glitch-text::before,
 .glitch-text::after {
-  content: attr(data-text);
-  position: absolute;
-  inset: 0;
+  content:        attr(data-text);
+  position:       absolute;
+  inset:          0;
   pointer-events: none;
 }
-
 .glitch-text::before {
-  color: var(--grid-cyan);
-  opacity: 0.7;
-  animation: glitchBefore 4.5s steps(1) infinite;
+  color:      var(--grid-cyan);
+  opacity:    0.7;
+  animation:  glitchBefore 4.5s steps(1) infinite;
   mix-blend-mode: screen;
 }
-
 .glitch-text::after {
-  color: var(--grid-magenta);
-  opacity: 0.55;
-  animation: glitchAfter 4.5s steps(1) infinite;
+  color:      var(--grid-magenta);
+  opacity:    0.55;
+  animation:  glitchAfter 4.5s steps(1) infinite;
   mix-blend-mode: screen;
 }
 
-/* ─── Boot scan line ────────────────────────────────────────────────────────  */
+/* ─── Boot scan line ─────────────────────────────────────────────────────────── */
 
 .boot-scan-line {
-  position: fixed;
-  inset: 0;
+  position:       fixed;
+  inset:          0;
   pointer-events: none;
-  z-index: 9999;
-  overflow: hidden;
+  z-index:        9999;
+  overflow:       hidden;
+}
+.boot-scan-line::after {
+  content:    "";
+  position:   absolute;
+  left:       0; right: 0;
+  height:     2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--grid-cyan),
+    transparent
+  );
+  opacity:    0.5;
+  animation:  scanLine 3.5s linear;
 }
 
-.boot-scan-line::after {
-  content: "";
-  position: absolute;
-  left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--grid-cyan), transparent);
-  opacity: 0.5;
-  animation: scanLine 3.5s linear;
+/* ─── Keyframes ──────────────────────────────────────────────────────────────── */
+
+@keyframes progressGlow {
+  0%, 100% { box-shadow: 0 0 8px #4df7ff55; }
+  50%      { box-shadow: 0 0 22px #4df7ffaa; }
+}
+@keyframes statusPulse {
+  0%, 100% { transform: scale(1);    opacity: 1;   }
+  50%      { transform: scale(1.35); opacity: 0.7; }
+}
+@keyframes glitchBefore {
+  0%, 100% { clip-path: inset(0 0 95% 0);   transform: translate(-3px, 0); }
+  20%      { clip-path: inset(20% 0 60% 0); transform: translate(3px, 0);  }
+  40%      { clip-path: inset(60% 0 20% 0); transform: translate(-3px, 0); }
+  60%      { clip-path: inset(80% 0 5% 0);  transform: translate(3px, 0);  }
+  80%      { clip-path: inset(40% 0 50% 0); transform: translate(-2px, 0); }
+}
+@keyframes glitchAfter {
+  0%, 100% { clip-path: inset(90% 0 2% 0);  transform: translate(3px, 0);  }
+  20%      { clip-path: inset(50% 0 40% 0); transform: translate(-3px, 0); }
+  40%      { clip-path: inset(10% 0 80% 0); transform: translate(3px, 0);  }
+  60%      { clip-path: inset(30% 0 60% 0); transform: translate(-3px, 0); }
+  80%      { clip-path: inset(70% 0 20% 0); transform: translate(2px, 0);  }
+}
+@keyframes scanLine {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+@keyframes pulseLine {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1;   }
+}
+@keyframes terminalBlink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+@keyframes ripple {
+  0%   { transform: scale(0); opacity: 0.4; }
+  100% { transform: scale(4); opacity: 0;   }
+}
+@keyframes bootFlicker {
+  0%, 100% { opacity: 1;   }
+  10%      { opacity: 0.4; }
+  20%      { opacity: 1;   }
+  50%      { opacity: 0.8; }
+  70%      { opacity: 1;   }
+  90%      { opacity: 0.6; }
 }

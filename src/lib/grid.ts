@@ -1,21 +1,4 @@
-// ─── Tier types ───────────────────────────────────────────────────────────────
-
-export type GridTierKey =
-  | "THE_GLITCH"
-  | "NETRUNNER"
-  | "SYS-ADMIN"
-  | "THE_ARCHITECT"
-  | "THE_SINGULARITY";
-
-export interface GridTier {
-  key:    GridTierKey;
-  min:    number;
-  max:    number | null;
-  label:  string;
-  mantra: string;
-}
-
-// ─── Credit transaction ledger ────────────────────────────────────────────────
+// ─── Transaction types ────────────────────────────────────────────────────────
 
 export type CreditTransactionType   = "EARN" | "REDEEM" | "BONUS" | "ADJUSTMENT";
 export type CreditTransactionSource = "ORDER" | "COUPON" | "ADMIN" | "SYSTEM";
@@ -33,7 +16,24 @@ export interface CreditTransaction {
   createdAt:    string;
 }
 
-// ─── Order history ────────────────────────────────────────────────────────────
+// ─── Tier types ───────────────────────────────────────────────────────────────
+
+export type GridTierKey =
+  | "THE_GLITCH"
+  | "NETRUNNER"
+  | "SYS-ADMIN"
+  | "THE_ARCHITECT"
+  | "THE_SINGULARITY";
+
+export interface GridTier {
+  key:    GridTierKey;
+  min:    number;
+  max:    number | null;
+  label:  string;
+  mantra: string;
+}
+
+// ─── Order types ──────────────────────────────────────────────────────────────
 
 export interface OrderHistory {
   orderId:     string;
@@ -45,8 +45,6 @@ export interface OrderHistory {
   createdAt:   string;
   syncedAt:    string;
 }
-
-// ─── Order summary (dashboard) ───────────────────────────────────────────────
 
 export interface GridOrderSummary {
   id:            string;
@@ -81,7 +79,7 @@ export interface GridCouponRecord {
   note?:        string;
 }
 
-// ─── Member ledger ────────────────────────────────────────────────────────────
+// ─── Ledger types ─────────────────────────────────────────────────────────────
 
 export interface GridMemberLedger {
   memberId:              string;
@@ -114,6 +112,15 @@ export interface GridLeaderboardEntry {
   lifetimeCreds: number;
 }
 
+// ─── Lifetime stats ───────────────────────────────────────────────────────────
+
+export interface LifetimeStats {
+  totalSavingsRupees:  number;
+  totalCouponsUsed:    number;
+  totalCouponsActive:  number;
+  totalCouponsExpired: number;
+}
+
 // ─── User stats ───────────────────────────────────────────────────────────────
 
 export interface UserStats {
@@ -130,30 +137,21 @@ export interface UserStats {
   totalSavingsRupees:     number;
 }
 
-// ─── Lifetime stats (dashboard) ───────────────────────────────────────────────
-
-export interface LifetimeStats {
-  totalSavingsRupees:  number;
-  totalCouponsUsed:    number;
-  totalCouponsActive:  number;
-  totalCouponsExpired: number;
-}
-
 // ─── Weekly report ────────────────────────────────────────────────────────────
 
 export interface WeeklyReportUser {
-  memberId:          string;
-  name:              string;
-  email:             string;
-  balance:           number;
-  earnedThisWeek:    number;
-  redeemedThisWeek:  number;
-  couponsCreated:    number;
-  couponsUsed:       number;
-  couponsActive:     number;
-  couponsExpired:    number;
-  savings:           number;
-  rank:              number;
+  memberId:         string;
+  name:             string;
+  email:            string;
+  balance:          number;
+  earnedThisWeek:   number;
+  redeemedThisWeek: number;
+  couponsCreated:   number;
+  couponsUsed:      number;
+  couponsActive:    number;
+  couponsExpired:   number;
+  savings:          number;
+  rank:             number;
 }
 
 export interface WeeklyReport {
@@ -205,35 +203,68 @@ export interface GridDashboardData {
   };
 }
 
-// ─── Tier data ────────────────────────────────────────────────────────────────
+// ─── Tier definitions ─────────────────────────────────────────────────────────
 
 export const GRID_TIERS: GridTier[] = [
-  { key: "THE_GLITCH",      min: 0,       max: 50000,   label: "THE_GLITCH",      mantra: "Entry node. Signal unstable."        },
-  { key: "NETRUNNER",       min: 50001,   max: 150000,  label: "NETRUNNER",       mantra: "Network access expanded."            },
-  { key: "SYS-ADMIN",       min: 150001,  max: 350000,  label: "SYS-ADMIN",       mantra: "Privilege escalation complete."      },
-  { key: "THE_ARCHITECT",   min: 350001,  max: 1000000, label: "THE_ARCHITECT",   mantra: "Reality edit access enabled."        },
-  { key: "THE_SINGULARITY", min: 1000001, max: null,    label: "THE_SINGULARITY", mantra: "System and self are one."            },
+  {
+    key:    "THE_GLITCH",
+    min:    0,
+    max:    50_000,
+    label:  "THE_GLITCH",
+    mantra: "Entry node. Signal unstable.",
+  },
+  {
+    key:    "NETRUNNER",
+    min:    50_001,
+    max:    150_000,
+    label:  "NETRUNNER",
+    mantra: "Network access expanded.",
+  },
+  {
+    key:    "SYS-ADMIN",
+    min:    150_001,
+    max:    350_000,
+    label:  "SYS-ADMIN",
+    mantra: "Privilege escalation complete.",
+  },
+  {
+    key:    "THE_ARCHITECT",
+    min:    350_001,
+    max:    1_000_000,
+    label:  "THE_ARCHITECT",
+    mantra: "Reality edit access enabled.",
+  },
+  {
+    key:    "THE_SINGULARITY",
+    min:    1_000_001,
+    max:    null,
+    label:  "THE_SINGULARITY",
+    mantra: "System and self are one.",
+  },
 ];
 
 // ─── Tier helpers ─────────────────────────────────────────────────────────────
 
 export function getGridTier(creds: number): GridTier {
   return (
-    [...GRID_TIERS].reverse().find((t) => creds >= t.min) ??
-    GRID_TIERS[0]
+    [...GRID_TIERS].reverse().find((t) => creds >= t.min) ?? GRID_TIERS[0]
   );
 }
 
 export function getNextGridTier(creds: number): GridTier | null {
   const idx = GRID_TIERS.findIndex((t) => t.key === getGridTier(creds).key);
-  return idx === -1 || idx === GRID_TIERS.length - 1 ? null : GRID_TIERS[idx + 1];
+  return idx === -1 || idx === GRID_TIERS.length - 1
+    ? null
+    : GRID_TIERS[idx + 1];
 }
 
-export function getGridProgress(creds: number): { ratio: number; remaining: number } {
+export function getGridProgress(
+  creds: number,
+): { ratio: number; remaining: number } {
   const current = getGridTier(creds);
   const next    = getNextGridTier(creds);
   if (!next || current.max === null) return { ratio: 1, remaining: 0 };
-  const span      = next.min - current.min;
+  const span       = next.min - current.min;
   const progressed = creds - current.min;
   return {
     ratio:     Math.min(Math.max(progressed / span, 0), 1),
@@ -243,7 +274,7 @@ export function getGridProgress(creds: number): { ratio: number; remaining: numb
 
 // ─── Credit helpers ───────────────────────────────────────────────────────────
 
-/** ₹1 spent = 1 Cred (floor to integer) */
+/** ₹1 spent = 1 Cred */
 export function rupeesToCreds(rupees: number): number {
   return Math.max(Math.floor(rupees), 0);
 }
@@ -254,15 +285,15 @@ export function credsToRupees(creds: number): number {
 }
 
 /**
- * Safely parse a monetary amount from any API shape.
- * Handles strings like "1500.00", numbers, and nulls.
+ * Safely normalises a monetary amount from any API response shape.
+ * Handles strings like "1500.00", numbers, null, and undefined.
  */
 export function normaliseAmount(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0)
+    return value;
   if (typeof value === "string") {
-    const cleaned = value.replace(/[^\d.]/g, "");
-    const parsed  = parseFloat(cleaned);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    const n = parseFloat(value.replace(/[^\d.]/g, ""));
+    return Number.isFinite(n) && n >= 0 ? n : 0;
   }
   return 0;
 }
