@@ -41,8 +41,12 @@ export async function startLoginFlow(returnTo?: string): Promise<{
   const originalUri  = returnTo ?? "/";
 
   // SDK generates state, codeVerifier, and codeChallenge internally.
-  const { oauthData, loginUrl } = generateOAuthLoginData(redirectUri, originalUri);
-
+  const { oauthData, loginUrl } =
+  await generateOAuthLoginData(
+    redirectUri,
+    originalUri
+  );
+  
   const oauthState: GridOAuthState = {
     state:         oauthData.state,
     codeChallenge: oauthData.codeChallenge,
