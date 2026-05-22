@@ -1,10 +1,15 @@
 import "server-only";
+import { ZodError } from "zod";
 
 export const ErrorCode = {
   AUTH_REQUIRED:         "AUTH_REQUIRED",
+  FORBIDDEN:             "FORBIDDEN",
   SESSION_EXPIRED:       "SESSION_EXPIRED",
   VALIDATION_ERROR:      "VALIDATION_ERROR",
+  IDEMPOTENCY_REQUIRED:  "IDEMPOTENCY_REQUIRED",
+  IDEMPOTENCY_CONFLICT:  "IDEMPOTENCY_CONFLICT",
   INSUFFICIENT_BALANCE:  "INSUFFICIENT_BALANCE",
+  FRAUD_HOLD:            "FRAUD_HOLD",
   COUPON_CREATE_FAILED:  "COUPON_CREATE_FAILED",
   COUPON_ALREADY_USED:   "COUPON_ALREADY_USED",
   CONCURRENT_REDEMPTION: "CONCURRENT_REDEMPTION",
@@ -40,6 +45,13 @@ export class AppError extends Error {
 
 export function toAppError(error: unknown): AppError {
   if (error instanceof AppError) return error;
+  if (error instanceof ZodError) {
+    return new AppError(
+      error.issues.map((issue) => issue.message).join("; "),
+      400,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
   if (error instanceof Error)
     return new AppError(error.message, 500, ErrorCode.INTERNAL_ERROR);
   if (typeof error === "string")

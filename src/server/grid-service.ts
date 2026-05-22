@@ -1,6 +1,7 @@
 import "server-only";
 
 import {
+  GRID_TIERS,
   getGridProgress,
   getGridTier,
   normaliseAmount,
@@ -13,9 +14,12 @@ import {
   type GridOrderSummary,
   type LifetimeStats,
 } from "@/lib/grid";
+import { deriveAchievements } from "@/server/achievement-service";
 import { getEnv } from "@/server/env";
 import { AppError, ErrorCode } from "@/server/errors";
 import { ledgerService } from "@/server/ledger-service";
+import { getLeaderboardPage, getMemberRankContext } from "@/server/leaderboard-service";
+import { assessMemberFraudRisk } from "@/server/fraud-service";
 import { logError, logInfo, logWarn, MSG } from "@/server/brand";
 import { getRepository } from "@/server/storage/repository";
 import {
@@ -200,14 +204,19 @@ function buildDashboard(
   coupons:      GridCouponRecord[],
   leaderboard:  GridLeaderboardEntry[],
   transactions: CreditTransaction[],
+  rank:          { rank: number | null; movement: number; total: number },
+  globalStats:   GridDashboardData["globalStats"],
 ): GridDashboardData {
-  const tier     = getGridTier(ledger.lifetimeCreds);
+  const tier     =
+    GRID_TIERS.find((t) => t.key === (ledger.rankOverride ?? ledger.level)) ??
+    getGridTier(ledger.lifetimeCreds);
   const progress = getGridProgress(ledger.lifetimeCreds);
   const nextTier =
     progress.remaining > 0
       ? getGridTier(ledger.lifetimeCreds + progress.remaining)
       : null;
   const visible = coupons.filter((c) => c.status !== "FAILED");
+  const achievements = deriveAchievements(ledger, visible);
 
   return {
     member: {
@@ -232,7 +241,11 @@ function buildDashboard(
     coupons:            visible,
     leaderboard,
     recentTransactions: transactions,
+    globalRank:         rank,
+    achievements,
+    activityFeed:       transactions,
     lifetimeStats:      buildLifetimeStats(visible),
+    globalStats,
     system: {
       syncWindowLabel: "24-48 hrs",
       syncedAt:        ledger.syncedAt,
@@ -346,11 +359,13 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
   }
 
   // ── 4. Compute final balance ────────────────────────────────────────────────
-  //   INVARIANT: lifetimeCreds  = purchaseCreds + bonusCreds
+  //   INVARIANT: lifetimeCreds  = purchaseCreds + bonusCreds + adjustmentCreds
   //              availableCreds = lifetimeCreds  - redeemedCreds
   const lifetimeCreds  = purchaseCreds + bonusCreds;
+  const adjustmentCreds = existing?.adjustmentCreds ?? 0;
+  const adjustedLifetimeCreds = Math.max(lifetimeCreds + adjustmentCreds, 0);
   const redeemedCreds  = existing?.redeemedCreds ?? 0;
-  const availableCreds = Math.max(lifetimeCreds - redeemedCreds, 0);
+  const availableCreds = Math.max(adjustedLifetimeCreds - redeemedCreds, 0);
   const now            = new Date().toISOString();
 
   const ledger: GridMemberLedger = {
@@ -364,12 +379,20 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
     totalPurchaseValue,
     purchaseCreds,
     bonusCreds,
-    lifetimeCreds,
+    adjustmentCreds,
+    lifetimeCreds: adjustedLifetimeCreds,
     redeemedCreds,
     availableCreds,
-    level:      getGridTier(lifetimeCreds).key,
+    level:      getGridTier(adjustedLifetimeCreds).key,
+    rankOverride: existing?.rankOverride ?? null,
+    rankOverrideReason: existing?.rankOverrideReason ?? null,
+    rankOverrideAt: existing?.rankOverrideAt ?? null,
     orderCount: eligible.length,
     orders:     eligible.slice(0, 8),
+    achievements: existing?.achievements ?? [],
+    fraudHold: existing?.fraudHold ?? false,
+    fraudScore: existing?.fraudScore ?? 0,
+    fraudSignals: existing?.fraudSignals ?? [],
     createdAt:  existing?.createdAt ?? now,
     updatedAt:  now,
     syncedAt:   now,
@@ -463,7 +486,7 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
   await verifyBalance(memberId, ledger);
 
   logInfo(memberId, "SYNC_COMPLETE", "OK", {
-    lifetimeCreds,
+    lifetimeCreds: adjustedLifetimeCreds,
     availableCreds,
     orders: eligible.length,
   });
@@ -474,7 +497,34 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function syncMemberById(memberId: string): Promise<GridMemberLedger> {
-  return getSyncLock().run(memberId, () => _syncUnsafe(memberId));
+  return getSyncLock().run(memberId, async () => {
+    const repo = getRepository();
+    const job = await repo.saveSyncJob({
+      id: crypto.randomUUID(),
+      type: "MEMBER_SYNC",
+      memberId,
+      status: "RUNNING",
+      startedAt: new Date().toISOString(),
+    });
+    try {
+      const ledger = await _syncUnsafe(memberId);
+      await repo.updateSyncJob(job.id, {
+        status: "COMPLETE",
+        processed: 1,
+        failed: 0,
+        completedAt: new Date().toISOString(),
+      });
+      return ledger;
+    } catch (error) {
+      await repo.updateSyncJob(job.id, {
+        status: "FAILED",
+        failed: 1,
+        message: error instanceof Error ? error.message : String(error),
+        completedAt: new Date().toISOString(),
+      });
+      throw error;
+    }
+  });
 }
 
 export async function getDashboardForMember(
@@ -487,13 +537,23 @@ export async function getDashboardForMember(
     ledger = await syncMemberById(memberId);
   }
 
-  const [coupons, leaderboard, transactions] = await Promise.all([
+  const [coupons, board, transactions, rank] = await Promise.all([
     repo.listCouponsByMember(memberId, 20),
-    repo.listTopMembers(5),
+    getLeaderboardPage({ page: 1, pageSize: 8 }),
     repo.listCreditTransactions(memberId, { limit: 10 }),
+    getMemberRankContext(memberId),
   ]);
 
-  return buildDashboard(ledger, coupons, leaderboard, transactions);
+  await assessMemberFraudRisk(memberId);
+
+  return buildDashboard(
+    ledger,
+    coupons,
+    board.entries,
+    transactions,
+    rank,
+    board.globalStats,
+  );
 }
 
 export async function syncAllMembers(): Promise<{
@@ -501,6 +561,13 @@ export async function syncAllMembers(): Promise<{
   synced: number;
   failed: number;
 }> {
+  const repo = getRepository();
+  const bulkJob = await repo.saveSyncJob({
+    id: crypto.randomUUID(),
+    type: "BULK_SYNC",
+    status: "RUNNING",
+    startedAt: new Date().toISOString(),
+  });
   const members = await queryAllMembers();
   let synced = 0, failed = 0;
 
@@ -518,6 +585,13 @@ export async function syncAllMembers(): Promise<{
     total: members.length,
     synced,
     failed,
+  });
+  await repo.updateSyncJob(bulkJob.id, {
+    status: failed > 0 ? "FAILED" : "COMPLETE",
+    total: members.length,
+    processed: synced,
+    failed,
+    completedAt: new Date().toISOString(),
   });
   return { total: members.length, synced, failed };
 }

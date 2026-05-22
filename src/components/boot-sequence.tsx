@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 const LINES = [
   "INITIALIZING GRID KERNEL v1.0.0...",
@@ -18,13 +18,11 @@ export function BootSequence({ onComplete }: Props) {
   const [lines, setLines]       = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
   const [exiting, setExiting]   = useState(false);
-  const ran = useRef(false);
 
   useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
-
     let idx = 0;
+    let exitTid: ReturnType<typeof setTimeout> | undefined;
+    let completeTid: ReturnType<typeof setTimeout> | undefined;
     const INTERVAL = 460;
 
     const id = setInterval(() => {
@@ -34,14 +32,18 @@ export function BootSequence({ onComplete }: Props) {
         idx++;
       } else {
         clearInterval(id);
-        setTimeout(() => {
+        exitTid = setTimeout(() => {
           setExiting(true);
-          setTimeout(onComplete, 420);
+          completeTid = setTimeout(onComplete, 420);
         }, 250);
       }
     }, INTERVAL);
 
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      if (exitTid) clearTimeout(exitTid);
+      if (completeTid) clearTimeout(completeTid);
+    };
   }, [onComplete]);
 
   return (

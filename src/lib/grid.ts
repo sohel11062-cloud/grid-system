@@ -1,7 +1,13 @@
 // ─── Transaction types ────────────────────────────────────────────────────────
 
 export type CreditTransactionType   = "EARN" | "REDEEM" | "BONUS" | "ADJUSTMENT";
-export type CreditTransactionSource = "ORDER" | "COUPON" | "ADMIN" | "SYSTEM";
+export type CreditTransactionSource =
+  | "ORDER"
+  | "COUPON"
+  | "ADMIN"
+  | "SYSTEM"
+  | "CAMPAIGN"
+  | "EVENT";
 
 export interface CreditTransaction {
   id:           string;
@@ -14,6 +20,25 @@ export interface CreditTransaction {
   description?: string;
   metadata?:    Record<string, unknown>;
   createdAt:    string;
+}
+
+// ─── User / role model ───────────────────────────────────────────────────────
+
+export type GridUserRole = "member" | "admin" | "owner";
+export type GridUserStatus = "ACTIVE" | "SUSPENDED" | "BANNED";
+
+export interface FraudSignal {
+  key:        string;
+  severity:   "LOW" | "MEDIUM" | "HIGH";
+  message:    string;
+  recordedAt: string;
+}
+
+export interface Achievement {
+  key:        string;
+  label:      string;
+  unlockedAt: string;
+  metadata?:  Record<string, unknown>;
 }
 
 // ─── Tier types ───────────────────────────────────────────────────────────────
@@ -92,15 +117,32 @@ export interface GridMemberLedger {
   totalPurchaseValue:    number;
   purchaseCreds:         number;
   bonusCreds:            number;
+  adjustmentCreds:       number;
   lifetimeCreds:         number;
   redeemedCreds:         number;
   availableCreds:        number;
   level:                 GridTierKey;
+  rankOverride?:         GridTierKey | null;
+  rankOverrideReason?:   string | null;
+  rankOverrideAt?:       string | null;
   orderCount:            number;
   orders:                GridOrderSummary[];
+  achievements?:         Achievement[];
+  fraudHold?:            boolean;
+  fraudScore?:           number;
+  fraudSignals?:         FraudSignal[];
   createdAt:             string;
   updatedAt:             string;
   syncedAt:              string;
+}
+
+export interface GridUser extends GridMemberLedger {
+  roles:       GridUserRole[];
+  status:      GridUserStatus;
+  lastLoginAt: string | null;
+  moderatedAt?: string | null;
+  moderatedBy?: string | null;
+  moderationReason?: string | null;
 }
 
 // ─── Leaderboard ──────────────────────────────────────────────────────────────
@@ -110,6 +152,124 @@ export interface GridLeaderboardEntry {
   username:      string;
   level:         GridTierKey;
   lifetimeCreds: number;
+  rank?:         number;
+  previousRank?: number | null;
+  movement?:     number;
+  availableCreds?: number;
+  orderCount?:     number;
+  fraudHold?:      boolean;
+}
+
+export interface LeaderboardSnapshot {
+  id:          string;
+  builtAt:     string;
+  expiresAt:   string;
+  entries:     GridLeaderboardEntry[];
+  globalStats: GlobalStats;
+}
+
+export interface GlobalStats {
+  activeUsers:              number;
+  totalCredsIssued:         number;
+  totalCredsRedeemed:       number;
+  totalAvailableCreds:      number;
+  totalPurchaseValue:       number;
+  totalCouponsIssued:       number;
+  totalCouponsUsed:         number;
+  totalSavingsRupees:       number;
+  suspendedUsers:           number;
+  usersOnFraudHold:         number;
+}
+
+export interface LeaderboardPage {
+  entries:     GridLeaderboardEntry[];
+  page:        number;
+  pageSize:    number;
+  total:       number;
+  builtAt:     string;
+  cached:      boolean;
+  globalStats: GlobalStats;
+}
+
+export type RedemptionStatus =
+  | "PENDING"
+  | "ISSUED"
+  | "FAILED"
+  | "RECOVERABLE"
+  | "CANCELLED";
+
+export interface RedemptionRecord {
+  id:             string;
+  memberId:       string;
+  couponId?:      string;
+  couponCode?:    string;
+  wixCouponId?:   string;
+  credsSpent:     number;
+  valueRupees:    number;
+  status:         RedemptionStatus;
+  idempotencyKey: string;
+  failureReason?: string;
+  recoveryNote?:  string;
+  createdAt:      string;
+  updatedAt:      string;
+}
+
+export type AdminActionType =
+  | "ADD_CREDS"
+  | "REMOVE_CREDS"
+  | "ADJUST_BALANCE"
+  | "BONUS_CAMPAIGN"
+  | "SEASONAL_EVENT"
+  | "FORCE_RANK"
+  | "MODERATE_USER"
+  | "RECONCILE_ORDER"
+  | "REDEMPTION_RECOVERY"
+  | "COUPON_MANAGEMENT";
+
+export interface AdminAction {
+  id:             string;
+  actorMemberId:  string;
+  actorEmail:     string;
+  targetMemberId?: string;
+  type:           AdminActionType;
+  amount?:        number;
+  reason:         string;
+  idempotencyKey: string;
+  metadata?:      Record<string, unknown>;
+  createdAt:      string;
+}
+
+export type AuditSeverity = "INFO" | "WARN" | "ERROR" | "SECURITY";
+
+export interface AuditLog {
+  id:             string;
+  actorMemberId?: string;
+  actorEmail?:    string;
+  memberId?:      string;
+  action:         string;
+  severity:       AuditSeverity;
+  message:        string;
+  requestId?:     string;
+  ipHash?:        string;
+  userAgent?:     string;
+  metadata?:      Record<string, unknown>;
+  createdAt:      string;
+}
+
+export type SyncJobStatus = "RUNNING" | "COMPLETE" | "FAILED";
+
+export interface SyncJob {
+  id:          string;
+  type:        "MEMBER_SYNC" | "BULK_SYNC" | "RECONCILIATION" | "LEADERBOARD";
+  memberId?:   string;
+  status:      SyncJobStatus;
+  total?:      number;
+  processed?:  number;
+  failed?:     number;
+  message?:    string;
+  startedAt:   string;
+  completedAt?: string;
+  metadata?:   Record<string, unknown>;
 }
 
 // ─── Lifetime stats ───────────────────────────────────────────────────────────
@@ -195,7 +355,15 @@ export interface GridDashboardData {
   coupons:            GridCouponRecord[];
   leaderboard:        GridLeaderboardEntry[];
   recentTransactions: CreditTransaction[];
+  globalRank:         {
+    rank:     number | null;
+    movement: number;
+    total:    number;
+  };
+  achievements:       Achievement[];
+  activityFeed:       CreditTransaction[];
   lifetimeStats:      LifetimeStats;
+  globalStats?:       GlobalStats;
   system: {
     syncWindowLabel: string;
     syncedAt:        string;

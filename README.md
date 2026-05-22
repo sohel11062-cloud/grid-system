@@ -18,6 +18,9 @@ Production-grade cyberpunk loyalty system for a fashion-tech brand, built with N
   - `THE_SINGULARITY`
 - Manual sync plus scheduled 24-hour sync via Vercel cron.
 - Redemption flow with coupon generation and tracked coupon ledger.
+- Persistent user, ledger, redemption, audit, admin-action, sync-job, and leaderboard-snapshot collections in MongoDB.
+- Cached global leaderboard with pagination, rank movement, global stats, and fraud-hold filtering.
+- Separate `/admin` owner console for Cred adjustments, campaigns, events, rank overrides, moderation, reconciliation, coupon review, redemption review, and audit visibility.
 - Immersive 3D cyberpunk interface with a holographic scene, glass panels, and responsive dashboards.
 
 ## Architecture
@@ -25,7 +28,7 @@ Production-grade cyberpunk loyalty system for a fashion-tech brand, built with N
 - Frontend: Next.js App Router, Tailwind CSS, Framer Motion, and a lazy-loaded Three.js scene.
 - Backend: Next.js serverless API routes under `src/app/api/*`.
 - Server layer: all Wix SDK auth, admin API, session, database, and loyalty logic lives under `src/server/*`.
-- Database: MongoDB Atlas recommended. If `MONGODB_URI` is omitted, the app falls back to in-memory storage for local UI work only.
+- Database: MongoDB Atlas recommended. Production persistence uses `users`, `ledgers`, `coupons`, `leaderboard_snapshots`, `redemptions`, `admin_actions`, `audit_logs`, and `sync_jobs`.
 
 ## Project Structure
 
@@ -108,6 +111,8 @@ Copy `.env.example` to `.env.local` and fill in the values.
 - `ALLOWED_ORIGIN`: frontend origin allowed to call the API cross-origin.
 - `SESSION_SECRET`: 32+ character secret used to encrypt HttpOnly session cookies.
 - `CRON_SECRET`: secret for the scheduled sync route.
+- `ADMIN_EMAILS`: comma-separated Wix member emails that bootstrap as owner/admin.
+- `ADMIN_MEMBER_IDS`: comma-separated Wix member IDs that bootstrap as owner/admin.
 
 ### Cookie strategy
 
@@ -137,6 +142,10 @@ Copy `.env.example` to `.env.local` and fill in the values.
 - `SYNC_STALE_HOURS`
 - `WELCOME_BONUS_CREDITS`
 - `BIRTHDAY_BONUS_CREDITS`
+- `LEADERBOARD_CACHE_TTL_MS`
+- `LEADERBOARD_SNAPSHOT_SIZE`
+- `REDEMPTION_IDEMPOTENCY_TTL_HOURS`
+- `FRAUD_HOLD_SCORE`
 
 ## Local Development
 
@@ -153,8 +162,20 @@ Open [http://localhost:3000](http://localhost:3000).
 - `POST /api/auth/exchange`: exchanges callback code for a secure session.
 - `POST /api/auth/logout`: clears the current session.
 - `GET /api/dashboard`: returns the full dashboard payload for the signed-in member.
+- `GET /api/leaderboard`: returns a cached paginated global leaderboard. Supports `page`, `pageSize`, and `refresh=true`.
 - `POST /api/sync`: manually resyncs the current member from Wix.
-- `POST /api/redeem`: redeems Creds and creates a coupon.
+- `POST /api/redeem`: redeems Creds and creates a coupon. Requires `Idempotency-Key`.
+- `GET /admin`: separate admin dashboard.
+- `GET /api/admin/overview`: admin control-plane data.
+- `GET /api/admin/users`: paginated users.
+- `POST /api/admin/users/:memberId/adjust`: idempotent manual Cred adjustment.
+- `POST /api/admin/users/:memberId/rank`: idempotent rank override.
+- `POST /api/admin/users/:memberId/moderation`: idempotent user moderation.
+- `POST /api/admin/campaigns/bonus`: owner-only global bonus campaign.
+- `POST /api/admin/events/seasonal`: owner-only seasonal event.
+- `POST /api/admin/reconcile`: manual order reconciliation.
+- `GET /api/admin/audit`, `/api/admin/redemptions`, `/api/admin/coupons`: admin review surfaces.
+- `POST /api/admin/redemptions/:redemptionId/recover`: idempotent redemption recovery resolution.
 - `GET /api/cron/sync`: scheduled full-member sync. Requires `Authorization: Bearer <CRON_SECRET>`.
 - `GET /api/health`: health check.
 

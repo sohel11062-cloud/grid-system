@@ -3,6 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { toAppError, ErrorCode }     from "@/server/errors";
 import type { RateLimitResult }      from "@/server/rate-limiter";
+import { getEnv }                    from "@/server/env";
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
@@ -12,10 +13,13 @@ export function applyCors(
 ): NextResponse {
   const origin = request.headers.get("origin");
   if (origin) {
+    const { APP_URL, ALLOWED_ORIGIN } = getEnv();
+    const allowed = new Set([APP_URL, ALLOWED_ORIGIN].filter(Boolean));
+    if (!allowed.has(origin)) return response;
     response.headers.set("Access-Control-Allow-Origin",      origin);
     response.headers.set("Access-Control-Allow-Credentials", "true");
-    response.headers.set("Access-Control-Allow-Headers",     "Content-Type, Authorization");
-    response.headers.set("Access-Control-Allow-Methods",     "GET, POST, OPTIONS");
+    response.headers.set("Access-Control-Allow-Headers",     "Content-Type, Authorization, Idempotency-Key, X-Idempotency-Key");
+    response.headers.set("Access-Control-Allow-Methods",     "GET, POST, PATCH, OPTIONS");
     response.headers.set("Vary",                             "Origin");
   }
   return response;

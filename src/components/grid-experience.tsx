@@ -10,6 +10,7 @@ import {
   type CreditTransaction,
   type GridCouponRecord,
   type GridDashboardData,
+  type LeaderboardPage,
 } from "@/lib/grid";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { BootSequence }    from "@/components/boot-sequence";
@@ -263,9 +264,14 @@ export function GridExperience() {
     ev.preventDefault();
     try {
       setRedeeming(true); setError(null); setLatest(null);
+      const idempotencyKey = crypto.randomUUID();
       const p = await gFetch<{ coupon: GridCouponRecord; dashboard: GridDashboardData }>(
         "/api/redeem",
-        { method: "POST", body: JSON.stringify({ creds: Number(credsInput) }) },
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify({ creds: Number(credsInput), idempotencyKey }),
+        },
       );
       setDashboard(p.dashboard);
       setLatest(p.coupon);
@@ -279,6 +285,30 @@ export function GridExperience() {
       setDashboard(null); setAuth(true); setLatest(null);
     } catch (e) { setError((e as Error).message ?? "Could not end session."); }
   }
+
+  useEffect(() => {
+    if (!dashboard) return;
+    const refreshLeaderboard = async () => {
+      try {
+        const p = await gFetch<{ leaderboard: LeaderboardPage }>(
+          "/api/leaderboard?pageSize=8&refresh=true",
+        );
+        setDashboard((current) =>
+          current
+            ? {
+                ...current,
+                leaderboard: p.leaderboard.entries,
+                globalStats: p.leaderboard.globalStats,
+              }
+            : current,
+        );
+      } catch {
+        // Dashboard data remains valid if a real-time leaderboard tick fails.
+      }
+    };
+    const tid = window.setInterval(refreshLeaderboard, 45_000);
+    return () => window.clearInterval(tid);
+  }, [dashboard?.member.memberId]);
 
   const redeemPreview = Number.isFinite(Number(credsInput))
     ? credsToRupees(Number(credsInput))
@@ -394,6 +424,32 @@ export function GridExperience() {
                       <p className="mt-3 text-2xl font-semibold text-white">{item.val}</p>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-grid-cyan/15 bg-grid-cyan/8 p-4">
+                  <p className="panel-title">GLOBAL RANK</p>
+                  <p className="mt-3 text-2xl font-semibold text-white">
+                    {d.globalRank.rank ? `#${d.globalRank.rank.toLocaleString("en-IN")}` : "UNRANKED"}
+                  </p>
+                  <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-grid-muted">
+                    {d.globalRank.total.toLocaleString("en-IN")} active nodes
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="panel-title">RANK MOVEMENT</p>
+                  <p className={`mt-3 text-2xl font-semibold ${d.globalRank.movement >= 0 ? "text-grid-cyan" : "text-grid-magenta"}`}>
+                    {d.globalRank.movement > 0 ? "+" : ""}{d.globalRank.movement}
+                  </p>
+                  <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-grid-muted">snapshot delta</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="panel-title">GLOBAL CREDS</p>
+                  <p className="mt-3 text-2xl font-semibold text-white">
+                    {formatCompactNumber(d.globalStats?.totalCredsIssued ?? d.wallet.lifetimeCreds)}
+                  </p>
+                  <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-grid-muted">issued network-wide</p>
                 </div>
               </div>
 
@@ -625,12 +681,71 @@ export function GridExperience() {
                     </div>
                     <p className="text-sm font-semibold text-white">
                       {e.lifetimeCreds.toLocaleString("en-IN")} C
+                      {typeof e.movement === "number" && e.movement !== 0 && (
+                        <span className={`ml-2 text-[10px] ${e.movement > 0 ? "text-grid-cyan" : "text-grid-magenta"}`}>
+                          {e.movement > 0 ? "▲" : "▼"} {Math.abs(e.movement)}
+                        </span>
+                      )}
                     </p>
                   </div>
                 ))}
               </div>
             </TiltCard>
           </motion.div>
+        </section>
+
+        {/* Achievements + live activity */}
+        <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          <TiltCard intensity={2}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="panel-title">ACHIEVEMENTS</p>
+                <h3 className="mt-2 text-lg uppercase tracking-[0.16em] text-white">Unlocked Signals</h3>
+              </div>
+              <span className="data-chip">{d.achievements.length}</span>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {d.achievements.length > 0 ? d.achievements.slice(0, 6).map((a) => (
+                <div key={a.key} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-sm font-semibold text-white">{a.label}</p>
+                  <p className="mt-1 text-[10px] uppercase tracking-[0.24em] text-grid-muted">{fmtShort(a.unlockedAt)}</p>
+                </div>
+              )) : (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-black/15 p-5 text-sm text-grid-muted">
+                  Achievements unlock as orders, tiers and redemptions enter the ledger.
+                </div>
+              )}
+            </div>
+          </TiltCard>
+
+          <TiltCard intensity={2}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="panel-title">LIVE ACTIVITY</p>
+                <h3 className="mt-2 text-lg uppercase tracking-[0.16em] text-white">Ledger Pulse</h3>
+              </div>
+              <StatusDot status={syncing ? "SYNCING" : d.system.connection} />
+            </div>
+            <div className="mt-5 space-y-2.5">
+              {d.activityFeed.slice(0, 5).map((tx) => (
+                <div key={`feed-${tx.id}`} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                  <div>
+                    <TxBadge type={tx.type} />
+                    <p className="mt-0.5 max-w-[260px] truncate text-[10px] text-grid-muted">{tx.description ?? tx.referenceId}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-white">{tx.amount.toLocaleString("en-IN")} C</p>
+                    <p className="text-[10px] text-grid-muted">{fmtShort(tx.createdAt)}</p>
+                  </div>
+                </div>
+              ))}
+              {d.activityFeed.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-black/15 p-5 text-sm text-grid-muted">
+                  Activity appears after the first sync or redemption.
+                </div>
+              )}
+            </div>
+          </TiltCard>
         </section>
 
         {/* Transaction history */}

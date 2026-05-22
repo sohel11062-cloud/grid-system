@@ -99,4 +99,24 @@ export const ledgerService = {
       { wixCouponId },
     );
   },
+
+  async recordAdjustment(
+    memberId:      string,
+    amount:        number,
+    balanceAfter:  number,
+    referenceId:   string,
+    description:   string,
+    metadata?:     Record<string, unknown>,
+  ): Promise<void> {
+    return record(
+      memberId,
+      "ADJUSTMENT",
+      amount,
+      balanceAfter,
+      "ADMIN",
+      referenceId,
+      description,
+      metadata,
+    );
+  },
 };

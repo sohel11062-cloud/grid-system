@@ -21,6 +21,7 @@ const redeemSchema = z.object({
     .positive("creds must be positive")
     .multipleOf(100, "creds must be a multiple of 100")
     .max(1_000_000, "creds cannot exceed 1,000,000"),
+  idempotencyKey: z.string().min(12).optional(),
 });
 
 export async function OPTIONS(req: NextRequest) { return optionsResponse(req); }
@@ -46,7 +47,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result   = await redeemMemberCreds(memberId, parsed.data.creds);
+    const key =
+      request.headers.get("idempotency-key") ??
+      request.headers.get("x-idempotency-key") ??
+      parsed.data.idempotencyKey;
+
+    const result   = await redeemMemberCreds(memberId, parsed.data.creds, key);
     const response = successResponse(
       { coupon: result.coupon, dashboard: result.dashboard },
       200,

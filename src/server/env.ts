@@ -46,12 +46,20 @@ const envSchema = z.object({
   COOKIE_DOMAIN:       z.string().optional(),
   ALLOWED_ORIGIN:      z.string().optional(),
 
+  // ── Admin bootstrap ─────────────────────────────────────────────────────────
+  // Comma-separated allowlists used only to bootstrap persistent owner/admin role.
+  ADMIN_EMAILS:     z.string().optional().default(""),
+  ADMIN_MEMBER_IDS: z.string().optional().default(""),
+
   // ── Business rules ────────────────────────────────────────────────────────────
   WELCOME_BONUS_CREDITS:       z.coerce.number().int().positive().default(5000),
   BIRTHDAY_BONUS_CREDITS:      z.coerce.number().int().positive().default(5000),
   SYNC_STALE_HOURS:            z.coerce.number().positive().default(24),
   GRID_COUPON_SCOPE_NAMESPACE: z.string().default("stores"),
   LEADERBOARD_CACHE_TTL_MS:    z.coerce.number().int().positive().default(300_000),
+  LEADERBOARD_SNAPSHOT_SIZE:   z.coerce.number().int().positive().default(500),
+  REDEMPTION_IDEMPOTENCY_TTL_HOURS: z.coerce.number().positive().default(24),
+  FRAUD_HOLD_SCORE:            z.coerce.number().int().positive().default(80),
 });
 
 export type GridEnv = z.infer<typeof envSchema>;

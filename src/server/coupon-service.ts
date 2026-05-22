@@ -4,6 +4,7 @@ import {
   credsToRupees,
   type GridCouponRecord,
   type GridDashboardData,
+  type RedemptionRecord,
 } from "@/lib/grid";
 import { AppError, ErrorCode }                    from "@/server/errors";
 import { MSG, logInfo, logError, logWarn }         from "@/server/brand";
@@ -12,12 +13,15 @@ import { createCouponCode }                        from "@/server/security";
 import { assertLedgerExists, getDashboardForMember } from "@/server/grid-service";
 import { getRepository }                           from "@/server/storage/repository";
 import { createMoneyOffCoupon, isDuplicateCodeError } from "@/server/wix";
+import { assessMemberFraudRisk } from "@/server/fraud-service";
+import { writeAuditLog } from "@/server/audit-service";
 
 const MAX_CODE_ATTEMPTS = 3;
 
 export async function redeemMemberCreds(
-  memberId: string,
-  creds:    number,
+  memberId:        string,
+  creds:           number,
+  idempotencyKey?: string,
 ): Promise<{ coupon: GridCouponRecord; dashboard: GridDashboardData }> {
 
   // ── Validation ─────────────────────────────────────────────────────────────
@@ -32,8 +36,40 @@ export async function redeemMemberCreds(
     );
   }
 
+  const key = idempotencyKey?.trim();
+  if (!key || key.length < 12) {
+    throw new AppError(
+      "An idempotency key is required for secure reward processing.",
+      400,
+      ErrorCode.IDEMPOTENCY_REQUIRED,
+    );
+  }
+
   const repo   = getRepository();
   const ledger = await assertLedgerExists(memberId);
+  const risk = await assessMemberFraudRisk(memberId);
+  if (risk.fraudHold) {
+    throw new AppError(
+      "This account is on fraud hold. Please contact support.",
+      403,
+      ErrorCode.FRAUD_HOLD,
+    );
+  }
+
+  const existingRedemption = await repo.getRedemptionByIdempotencyKey(memberId, key);
+  if (existingRedemption) {
+    const coupons = await repo.listCouponsByMember(memberId, 100);
+    const coupon = coupons.find((c) => c.code === existingRedemption.couponCode);
+    if (existingRedemption.status === "ISSUED" && coupon) {
+      const dashboard = await getDashboardForMember(memberId, false);
+      return { coupon, dashboard };
+    }
+    throw new AppError(
+      `Redemption key already used with status ${existingRedemption.status}.`,
+      409,
+      ErrorCode.IDEMPOTENCY_CONFLICT,
+    );
+  }
 
   if (ledger.availableCreds < creds) {
     throw new AppError(
@@ -54,6 +90,16 @@ export async function redeemMemberCreds(
 
   const now       = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1_000).toISOString();
+  const redemption: RedemptionRecord = await repo.saveRedemption({
+    id: crypto.randomUUID(),
+    memberId,
+    credsSpent: creds,
+    valueRupees: rupeeInt,
+    status: "PENDING",
+    idempotencyKey: key,
+    createdAt: now,
+    updatedAt: now,
+  });
 
   // ── Create coupon via Reward Engine (retry on duplicate code) ──────────────
   let wixCouponId: string | undefined;
@@ -95,6 +141,13 @@ export async function redeemMemberCreds(
     try { await repo.saveCoupon(failed); } catch (e) {
       logError(memberId, "SAVE_FAILED_COUPON", e);
     }
+    await repo.updateRedemption(redemption.id, {
+      status: "FAILED",
+      couponCode: failed.code,
+      couponId: failed.id,
+      failureReason: MSG.COUPON_FAILED,
+      updatedAt: new Date().toISOString(),
+    });
     logError(memberId, "COUPON_CREATE", lastError, { attempts: MAX_CODE_ATTEMPTS });
     throw new AppError(MSG.COUPON_FAILED, 502, ErrorCode.COUPON_CREATE_FAILED);
   }
@@ -109,6 +162,20 @@ export async function redeemMemberCreds(
       creds,
       couponCode: finalCode,
       wixCouponId,
+    });
+    await repo.updateRedemption(redemption.id, {
+      status: "RECOVERABLE",
+      couponCode: finalCode,
+      wixCouponId,
+      recoveryNote: "Wix coupon was issued but local Cred deduction failed.",
+      updatedAt: new Date().toISOString(),
+    });
+    await writeAuditLog({
+      action: "REDEMPTION_RECOVERY_REQUIRED",
+      severity: "ERROR",
+      message: "Coupon was issued before atomic Cred deduction failed.",
+      memberId,
+      metadata: { couponCode: finalCode, wixCouponId, creds },
     });
     throw new AppError(MSG.REDEMPTION_RACE, 409, ErrorCode.CONCURRENT_REDEMPTION);
   }
@@ -129,6 +196,13 @@ export async function redeemMemberCreds(
   };
 
   await repo.saveCoupon(coupon);
+  await repo.updateRedemption(redemption.id, {
+    status: "ISSUED",
+    couponId: coupon.id,
+    couponCode: coupon.code,
+    wixCouponId,
+    updatedAt: new Date().toISOString(),
+  });
   await ledgerService.recordRedemption(
     memberId,
     creds,
@@ -141,6 +215,12 @@ export async function redeemMemberCreds(
     code:          finalCode,
     credsDeducted: creds,
     newBalance:    updated.availableCreds,
+  });
+  await writeAuditLog({
+    action: "REDEMPTION_ISSUED",
+    message: "Member redeemed Creds for a unique Wix coupon.",
+    memberId,
+    metadata: { couponCode: finalCode, wixCouponId, creds },
   });
 
   const dashboard = await getDashboardForMember(memberId, false);

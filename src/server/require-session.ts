@@ -5,6 +5,7 @@ import { refreshSessionIfNeeded } from "@/server/auth-service";
 import { AppError, ErrorCode } from "@/server/errors";
 import { MSG } from "@/server/brand";
 import { readSessionCookie, setSessionCookie } from "@/server/session";
+import { ensureUserFromSession } from "@/server/user-service";
 
 /**
  * Reads and validates the session cookie, then proactively refreshes the
@@ -25,7 +26,10 @@ export async function requireSession(request: NextRequest) {
     throw new AppError(MSG.SESSION_EXPIRED, 401, ErrorCode.SESSION_EXPIRED);
   }
 
-  return refreshSessionIfNeeded(session);
+  const authState = await refreshSessionIfNeeded(session);
+  const user = await ensureUserFromSession(authState.session);
+
+  return { ...authState, user };
 }
 
 /**
