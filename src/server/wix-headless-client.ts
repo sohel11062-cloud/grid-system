@@ -72,15 +72,11 @@ export async function generateOAuthLoginData(
     const client =
       createHeadlessWixClient();
 
-    // IMPORTANT:
-    // SDK expects ORIGINAL URI here
     const oauthData =
       client.auth.generateOAuthData(
         originalUri
       );
 
-    // CRITICAL:
-    // override redirect URI BEFORE generating URL
     oauthData.redirectUri =
       redirectUri;
 
@@ -89,14 +85,18 @@ export async function generateOAuthLoginData(
       redirectUri
     );
 
-    console.log(
-      "[GRID_AUTH] oauth redirectUri =",
-      oauthData.redirectUri
-    );
-
-    const { authUrl: loginUrl } =
+    const { authUrl } =
       await client.auth.getAuthUrl(
         oauthData
+      );
+
+    // IMPORTANT:
+    // Convert fragment → query
+    // So Next.js can read code/state
+    const loginUrl =
+      authUrl.replace(
+        "responseMode=fragment",
+        "responseMode=query"
       );
 
     console.log(
