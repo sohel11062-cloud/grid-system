@@ -7,7 +7,6 @@ import {
   type OauthData,
   type Tokens,
 } from "@wix/sdk";
-
 import { contacts } from "@wix/crm";
 import { members } from "@wix/members";
 import { products } from "@wix/stores";
@@ -15,341 +14,198 @@ import { products } from "@wix/stores";
 import { AppError, ErrorCode } from "@/server/errors";
 import { MSG } from "@/server/brand";
 import { getEnv } from "@/server/env";
+import type { GridOAuthState, GridRefreshTokenRole, GridSession } from "@/server/session";
 
-import type {
-  GridOAuthState,
-  GridRefreshTokenRole,
-  GridSession,
-} from "@/server/session";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface WixTokenResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
-}
+// ─── Exported types ───────────────────────────────────────────────────────────
 
 export interface WixMemberInfo {
-  id: string;
-  loginEmail?: string;
-  contactId?: string;
-  profile?: {
-    nickname?: string;
-  };
-  contact?: {
-    firstName?: string;
-    lastName?: string;
-  };
+  id:        string;
+  loginEmail: string;
+  contactId:  string | null;
+  profile:    { nickname: string | null };
+  contact:    { firstName: string | null; lastName: string | null };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Client Factory
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Client factory ───────────────────────────────────────────────────────────
 
 export function createHeadlessWixClient(tokens?: Tokens) {
-  const env = getEnv();
-
+  const { WIX_CLIENT_ID } = getEnv();
   return createClient({
-    modules: {
-      products,
-      members,
-      contacts,
-    },
-
-    auth: OAuthStrategy(
+    modules: { products, members, contacts },
+    auth:    OAuthStrategy(
       tokens
-        ? {
-            clientId: env.WIX_CLIENT_ID,
-            tokens,
-          }
-        : {
-            clientId: env.WIX_CLIENT_ID,
-          }
+        ? { clientId: WIX_CLIENT_ID, tokens }
+        : { clientId: WIX_CLIENT_ID }
     ),
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OAuth Helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Login: generate OAuth data + Wix-managed login URL ──────────────────────
 
-export function generatePKCE(): {
-  verifier: string;
-  challenge: string;
-} {
-  return {
-    verifier: "",
-    challenge: "",
+/**
+ * Generates PKCE parameters (state, codeVerifier, codeChallenge) via the Wix SDK
+ * and returns the Wix-managed login URL.
+ *
+ * IMPORTANT: The returned `oauthData` MUST be stored in a signed, httpOnly cookie
+ * before redirecting the user. It contains the `codeVerifier` required for the
+ * PKCE token exchange at the callback step.  Storing it in process memory would
+ * break in any multi-instance or serverless (Vercel) deployment.
+ */
+export function generateOAuthLoginData(
+  redirectUri: string,
+  originalUri: string,
+): { oauthData: OauthData; loginUrl: string } {
+  const client    = createHeadlessWixClient();
+  const oauthData = client.auth.generateOAuthData({ redirectUri, originalUri });
+  const loginUrl  = client.auth.getAuthUrl(oauthData);
+  return { oauthData, loginUrl };
+}
+
+// ─── Callback: exchange auth code → Wix member tokens ────────────────────────
+
+/**
+ * Exchanges the Wix authorization `code` for access + refresh tokens.
+ * Reconstructs the `OauthData` from the cookie-persisted `GridOAuthState`
+ * so the Wix SDK can perform PKCE verification using the original `codeVerifier`.
+ */
+export async function exchangeCodeForWixTokens(
+  code:       string,
+  oauthState: GridOAuthState,
+): Promise<Tokens> {
+  // Reconstruct OauthData from the cookie — same shape, minus the extra `createdAt`.
+  const oauthData: OauthData = {
+    state:         oauthState.state,
+    codeChallenge: oauthState.codeChallenge,
+    codeVerifier:  oauthState.codeVerifier,
+    redirectUri:   oauthState.redirectUri,
+    originalUri:   oauthState.originalUri,
   };
-}
 
-export function generateState(): string {
-  return crypto.randomUUID();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// OAuth State Serialization
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function createOauthStateRecord(data: OauthData): GridOAuthState {
-  return {
-    state: data.state,
-    codeChallenge: data.codeChallenge,
-    codeVerifier: data.codeVerifier,
-    redirectUri: data.redirectUri,
-    originalUri: data.originalUri,
-    createdAt: new Date().toISOString(),
-  };
-}
-
-export function toOauthData(state: GridOAuthState): OauthData {
-  return {
-    state: state.state,
-    codeChallenge: state.codeChallenge,
-    codeVerifier: state.codeVerifier,
-    redirectUri: state.redirectUri,
-    originalUri: state.originalUri,
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Build Login URL (SDK-backed)
-// ─────────────────────────────────────────────────────────────────────────────
-
-let oauthStore = new Map<string, OauthData>();
-
-export function buildLoginUrl(params: {
-  state: string;
-  codeChallenge: string;
-  redirectUri: string;
-}): string {
-  const client = createHeadlessWixClient();
-
-  const oauthData = client.auth.generateOAuthData({
-    redirectUri: params.redirectUri,
-    originalUri: "/",
-  });
-
-  oauthStore.set(oauthData.state, oauthData);
-
-  return client.auth.getAuthUrl(oauthData);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Token Exchange (SDK-backed)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function exchangeCodeForTokens(params: {
-  code: string;
-  codeVerifier: string;
-  redirectUri: string;
-  state?: string;
-}): Promise<WixTokenResponse> {
   try {
     const client = createHeadlessWixClient();
+    return await client.auth.getMemberTokens(code, oauthData);
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    console.error("[GRID_AUTH] getMemberTokens failed:", error);
+    throw new AppError(MSG.INTERNAL_ERROR, 401, ErrorCode.WIX_API_ERROR);
+  }
+}
 
-    const oauthData =
-      (params.state && oauthStore.get(params.state)) || undefined;
+// ─── Refresh Wix tokens using the stored refresh token ───────────────────────
 
-    if (!oauthData) {
+/**
+ * Uses the stored refresh token to obtain a fresh access + refresh token pair.
+ * The client is initialized with an already-expired access token so the SDK
+ * is forced into refresh-only mode.
+ */
+export async function refreshWixTokens(refreshToken: string): Promise<Tokens> {
+  try {
+    const client = createHeadlessWixClient({
+      // Expire in the past — forces the SDK to treat this as a refresh-only call.
+      accessToken:  { value: "", expiresAt: Date.now() - 60_000 },
+      refreshToken: { value: refreshToken, role: TokenRole.MEMBER },
+    });
+    return await client.auth.refreshToken();
+  } catch (error) {
+    console.error("[GRID_AUTH] refreshToken failed:", error);
+    throw new AppError(MSG.SESSION_EXPIRED, 401, ErrorCode.SESSION_EXPIRED);
+  }
+}
+
+// ─── Fetch the currently-authenticated member's profile ──────────────────────
+
+export async function getAuthenticatedMember(tokens: Tokens): Promise<WixMemberInfo> {
+  try {
+    const client = createHeadlessWixClient(tokens);
+
+    // "FULL" fieldset returns profile + contact details needed for username resolution.
+    // `as const` ensures TypeScript infers "FULL" as a string literal, which satisfies
+    // the SDK's enum-based fieldset type (e.g. MemberFieldSet | "FULL" | ...).
+    const { member } = await client.members.getCurrentMember({
+      fieldsets: ["FULL" as const],
+    });
+
+    if (!member) {
       throw new AppError(
-        "OAuth state expired or missing.",
-        400,
-        ErrorCode.VALIDATION_ERROR
+        "Wix returned an empty member payload.",
+        401,
+        ErrorCode.AUTH_REQUIRED,
       );
     }
 
-    const tokens = await client.auth.getMemberTokens(
-      params.code,
-      oauthData
-    );
+    // `_id` is the canonical field in the Members v1 API.
+    // Capture before the guard so TypeScript can narrow the type.
+    const id:         string | null | undefined = member._id;
+    const loginEmail: string | null | undefined = member.loginEmail;
+
+    if (!id || !loginEmail) {
+      throw new AppError(
+        "Wix did not return a usable member identity.",
+        401,
+        ErrorCode.AUTH_REQUIRED,
+      );
+    }
 
     return {
-      access_token: tokens.accessToken.value,
-      refresh_token: tokens.refreshToken.value,
-      token_type: "Bearer",
-      expires_in: Math.floor(
-        (tokens.accessToken.expiresAt - Date.now()) / 1000
-      ),
+      id,
+      loginEmail,
+      contactId:  member.contactId          ?? null,
+      profile:    { nickname:   member.profile?.nickname   ?? null },
+      contact:    {
+        firstName: member.contact?.firstName ?? null,
+        lastName:  member.contact?.lastName  ?? null,
+      },
     };
   } catch (error) {
-    console.error("[GRID_AUTH] Token exchange failed:", error);
-
-    throw new AppError(
-      MSG.INTERNAL_ERROR,
-      401,
-      ErrorCode.WIX_API_ERROR
-    );
+    if (error instanceof AppError) throw error;
+    console.error("[GRID_AUTH] getCurrentMember failed:", error);
+    throw new AppError(MSG.AUTH_REQUIRED, 401, ErrorCode.AUTH_REQUIRED);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Token Refresh (SDK-backed)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Token ↔ GridSession conversion helpers ───────────────────────────────────
 
-export async function refreshAccessToken(
-  refreshToken: string
-): Promise<WixTokenResponse> {
-  try {
-    const client = createHeadlessWixClient({
-      accessToken: {
-        value: "",
-        expiresAt: Date.now() + 1000,
-      },
-
-      refreshToken: {
-        value: refreshToken,
-        role: TokenRole.MEMBER,
-      },
-    });
-
-    const tokens = await client.auth.refreshToken();
-
-    return {
-      access_token: tokens.accessToken.value,
-      refresh_token: tokens.refreshToken.value,
-      token_type: "Bearer",
-      expires_in: Math.floor(
-        (tokens.accessToken.expiresAt - Date.now()) / 1000
-      ),
-    };
-  } catch (error) {
-    console.error("[GRID_AUTH] Token refresh failed:", error);
-
-    throw new AppError(
-      MSG.SESSION_EXPIRED,
-      401,
-      ErrorCode.SESSION_EXPIRED
-    );
-  }
+export function tokensToSessionFields(tokens: Tokens): {
+  accessToken:          string;
+  refreshToken:         string;
+  refreshTokenRole:     GridRefreshTokenRole;
+  accessTokenExpiresAt: string;
+} {
+  return {
+    accessToken:          tokens.accessToken.value,
+    refreshToken:         tokens.refreshToken.value,
+    refreshTokenRole:     sdkRoleToGrid(tokens.refreshToken.role),
+    accessTokenExpiresAt: new Date(tokens.accessToken.expiresAt).toISOString(),
+  };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Token Conversion
-// ─────────────────────────────────────────────────────────────────────────────
+export function sessionToSdkTokens(session: GridSession): Tokens {
+  return {
+    accessToken: {
+      value:     session.accessToken,
+      expiresAt: new Date(session.accessTokenExpiresAt).getTime(),
+    },
+    refreshToken: {
+      value: session.refreshToken,
+      role:  gridRoleToSdk(session.refreshTokenRole),
+    },
+  };
+}
+
+// ─── Private role-conversion helpers ─────────────────────────────────────────
 
 function sdkRoleToGrid(role: TokenRole): GridRefreshTokenRole {
   switch (role) {
-    case TokenRole.MEMBER:
-      return "member";
-
-    case TokenRole.VISITOR:
-      return "visitor";
-
-    default:
-      return "none";
+    case TokenRole.MEMBER:  return "member";
+    case TokenRole.VISITOR: return "visitor";
+    default:                return "none";
   }
 }
 
 function gridRoleToSdk(role: GridRefreshTokenRole): TokenRole {
   switch (role) {
-    case "member":
-      return TokenRole.MEMBER;
-
-    case "visitor":
-      return TokenRole.VISITOR;
-
-    default:
-      return TokenRole.NONE;
-  }
-}
-
-export function tokensToSessionFields(tokens: Tokens) {
-  return {
-    accessToken: tokens.accessToken.value,
-
-    refreshToken: tokens.refreshToken.value,
-
-    refreshTokenRole: sdkRoleToGrid(
-      tokens.refreshToken.role
-    ),
-
-    accessTokenExpiresAt: new Date(
-      tokens.accessToken.expiresAt
-    ).toISOString(),
-  };
-}
-
-export function sessionToSdkTokens(
-  session: GridSession
-): Tokens {
-  return {
-    accessToken: {
-      value: session.accessToken,
-      expiresAt: new Date(
-        session.accessTokenExpiresAt
-      ).getTime(),
-    },
-
-    refreshToken: {
-      value: session.refreshToken,
-      role: gridRoleToSdk(
-        session.refreshTokenRole
-      ),
-    },
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Authenticated Member
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function getAuthenticatedMember(
-  accessToken: string
-): Promise<WixMemberInfo> {
-  try {
-    const client = createHeadlessWixClient({
-      accessToken: {
-        value: accessToken,
-        expiresAt: Date.now() + 3600_000,
-      },
-
-      refreshToken: {
-        value: "",
-        role: TokenRole.NONE,
-      },
-    });
-
-    const res = await client.members.getCurrentMember({
-      fieldsets: ["FULL"],
-    });
-
-    const m = res.member;
-
-    if (!m?._id || !m.loginEmail) {
-      throw new AppError(
-        "Wix did not return a usable member identity.",
-        401
-      );
-    }
-
-    return {
-      id: m._id,
-
-      loginEmail: m.loginEmail,
-
-      contactId: m.contactId ?? undefined,
-
-      profile: {
-        nickname: m.profile?.nickname ?? undefined,
-      },
-
-      contact: {
-        firstName: m.contact?.firstName ?? undefined,
-        lastName: m.contact?.lastName ?? undefined,
-      },
-    };
-  } catch (error) {
-    console.error("[GRID_AUTH] Get member failed:", error);
-
-    throw new AppError(
-      MSG.AUTH_REQUIRED,
-      401,
-      ErrorCode.AUTH_REQUIRED
-    );
+    case "member":  return TokenRole.MEMBER;
+    case "visitor": return TokenRole.VISITOR;
+    default:        return TokenRole.NONE;
   }
 }

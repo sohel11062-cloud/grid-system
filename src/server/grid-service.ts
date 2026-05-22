@@ -47,7 +47,11 @@ class AsyncLockMap {
   }
 }
 
-declare global { var __GRID_SYNC_LOCK__: AsyncLockMap | undefined; } // eslint-disable-line no-var
+declare global {
+  // eslint-disable-next-line no-var
+  var __GRID_SYNC_LOCK__: AsyncLockMap | undefined;
+}
+
 function getSyncLock(): AsyncLockMap {
   if (!global.__GRID_SYNC_LOCK__) global.__GRID_SYNC_LOCK__ = new AsyncLockMap();
   return global.__GRID_SYNC_LOCK__;
@@ -69,12 +73,18 @@ function birthdayMMDD(contact: WixContact | null): string | null {
   return mm && dd ? `${mm}-${dd}` : null;
 }
 
+/**
+ * Resolves a display name from the member + contact payloads.
+ * NOTE: The admin REST API returns `_id`, not `id`.
+ */
 function resolveUsername(member: WixMember, contact: WixContact | null): string {
   return (
-    member.profile?.nickname?.trim() ||
-    [member.contact?.firstName, member.contact?.lastName].map((s) => s?.trim() ?? "").filter(Boolean).join(" ") ||
-    [contact?.info?.name?.first, contact?.info?.name?.last].map((s) => s?.trim() ?? "").filter(Boolean).join(" ") ||
-    member.loginEmail?.trim() ||
+    member.profile?.nickname?.trim()                                                                          ||
+    [member.contact?.firstName, member.contact?.lastName]
+      .map((s) => s?.trim() ?? "").filter(Boolean).join(" ")                                                  ||
+    [contact?.info?.name?.first, contact?.info?.name?.last]
+      .map((s) => s?.trim() ?? "").filter(Boolean).join(" ")                                                  ||
+    member.loginEmail?.trim()                                                                                 ||
     "GRID_USER"
   );
 }
@@ -88,27 +98,25 @@ function isEligibleOrder(order: WixOrder): boolean {
 }
 
 /**
- * Extract order total safely from all known Wix API shapes.
- * Wix returns amounts in different shapes across API versions:
- *   Shape A: priceSummary.total.amount = "1500.00"  (object with amount field)
- *   Shape B: priceSummary.total = "1500.00"          (bare scalar)
- *   Shape C: totals.total = 1500                     (legacy field)
+ * Extracts the order total from all known Wix API response shapes.
+ *
+ * Shape A: `priceSummary.total = { amount: "1500.00" }` (nested object)
+ * Shape B: `priceSummary.total = "1500.00"` (bare scalar)
+ * Shape C: `totals.total = 1500` (legacy field)
  */
 export function extractOrderTotal(order: WixOrder): number {
   const rawTotal = order.priceSummary?.total as unknown;
 
   const candidates: unknown[] = [
-    // Shape A – nested amount
+    // Shape A
     typeof rawTotal === "object" && rawTotal !== null
       ? (rawTotal as Record<string, unknown>).amount
       : undefined,
-    // Shape B – bare scalar
+    // Shape B
     typeof rawTotal === "number" || typeof rawTotal === "string" ? rawTotal : undefined,
-    // totalPrice fallback
+    // Fallbacks
     order.priceSummary?.totalPrice?.amount,
-    // subtotal fallback
     order.priceSummary?.subtotal?.amount,
-    // Legacy totals
     order.totals?.total,
   ];
 
@@ -120,9 +128,6 @@ export function extractOrderTotal(order: WixOrder): number {
   return 0;
 }
 
-/**
- * Extract coupon code from all known Wix order structures.
- */
 function extractCouponCode(order: WixOrder): string | null {
   const fromApplied = order.appliedCoupon?.code?.trim();
   if (fromApplied) return fromApplied;
@@ -142,7 +147,7 @@ function isCouponGenuinelyApplied(order: WixOrder): boolean {
   if (order.appliedCoupon?.couponId) return true;
   const discountAmount = order.appliedCoupon?.discount?.amount;
   if (discountAmount !== undefined) return normaliseAmount(discountAmount) > 0;
-  return true; // if code present but no discount info, trust the code
+  return true;
 }
 
 function toOrderSummary(order: WixOrder): GridOrderSummary {
@@ -150,26 +155,43 @@ function toOrderSummary(order: WixOrder): GridOrderSummary {
     id:            order.id,
     number:        order.number    ?? order.id,
     total:         extractOrderTotal(order),
-    currency:      (order.priceSummary?.total as { currency?: string } | null)?.currency ?? "INR",
+    currency:
+      (order.priceSummary?.total as { currency?: string } | null)?.currency ?? "INR",
     purchasedDate: order.purchasedDate ?? null,
     status:        order.status        ?? "UNKNOWN",
     paymentStatus: order.paymentStatus ?? "UNKNOWN",
-    items:         order.lineItems?.map((i) => i.productName?.original).filter((n): n is string => Boolean(n)) ?? [],
-    couponCode:    extractCouponCode(order) ?? undefined,
+    items:
+      order.lineItems
+        ?.map((i) => i.productName?.original)
+        .filter((n): n is string => Boolean(n)) ?? [],
+    couponCode: extractCouponCode(order) ?? undefined,
   };
 }
 
 function isStale(ledger: GridMemberLedger): boolean {
-  return Date.now() - new Date(ledger.syncedAt).getTime() > getEnv().SYNC_STALE_HOURS * 3_600_000;
+  return (
+    Date.now() - new Date(ledger.syncedAt).getTime() >
+    getEnv().SYNC_STALE_HOURS * 3_600_000
+  );
 }
 
 function buildLifetimeStats(coupons: GridCouponRecord[]): LifetimeStats {
   const now = new Date().toISOString();
   return {
-    totalSavingsRupees:  coupons.filter((c) => c.status === "USED").reduce((s, c) => s + c.valueRupees, 0),
-    totalCouponsUsed:    coupons.filter((c) => c.status === "USED").length,
-    totalCouponsActive:  coupons.filter((c) => c.status === "ACTIVE" && (!c.expiresAt || c.expiresAt > now)).length,
-    totalCouponsExpired: coupons.filter((c) => c.status === "EXPIRED" || (c.status === "ACTIVE" && !!c.expiresAt && c.expiresAt <= now)).length,
+    totalSavingsRupees:
+      coupons.filter((c) => c.status === "USED").reduce((s, c) => s + c.valueRupees, 0),
+    totalCouponsUsed:
+      coupons.filter((c) => c.status === "USED").length,
+    totalCouponsActive:
+      coupons.filter(
+        (c) => c.status === "ACTIVE" && (!c.expiresAt || c.expiresAt > now),
+      ).length,
+    totalCouponsExpired:
+      coupons.filter(
+        (c) =>
+          c.status === "EXPIRED" ||
+          (c.status === "ACTIVE" && !!c.expiresAt && c.expiresAt <= now),
+      ).length,
   };
 }
 
@@ -177,12 +199,15 @@ function buildDashboard(
   ledger:       GridMemberLedger,
   coupons:      GridCouponRecord[],
   leaderboard:  GridLeaderboardEntry[],
-  transactions: CreditTransaction[]
+  transactions: CreditTransaction[],
 ): GridDashboardData {
   const tier     = getGridTier(ledger.lifetimeCreds);
   const progress = getGridProgress(ledger.lifetimeCreds);
-  const nextTier = progress.remaining > 0 ? getGridTier(ledger.lifetimeCreds + progress.remaining) : null;
-  const visible  = coupons.filter((c) => c.status !== "FAILED");
+  const nextTier =
+    progress.remaining > 0
+      ? getGridTier(ledger.lifetimeCreds + progress.remaining)
+      : null;
+  const visible = coupons.filter((c) => c.status !== "FAILED");
 
   return {
     member: {
@@ -216,11 +241,16 @@ function buildDashboard(
   };
 }
 
-// ─── Balance reconciliation (diagnostic, never throws) ────────────────────────
+// ─── Balance verification (diagnostic only — never throws) ───────────────────
 
-async function verifyBalance(memberId: string, ledger: GridMemberLedger): Promise<void> {
+async function verifyBalance(
+  memberId: string,
+  ledger:   GridMemberLedger,
+): Promise<void> {
   try {
-    const txs = await getRepository().listCreditTransactions(memberId, { limit: 100_000 });
+    const txs = await getRepository().listCreditTransactions(memberId, {
+      limit: 100_000,
+    });
     let earned = 0, redeemed = 0, bonus = 0;
     for (const tx of txs) {
       if (tx.type === "EARN")   earned   += tx.amount;
@@ -239,7 +269,7 @@ async function verifyBalance(memberId: string, ledger: GridMemberLedger): Promis
   } catch { /* diagnostic only */ }
 }
 
-// ─── Core sync ────────────────────────────────────────────────────────────────
+// ─── Core per-member sync ─────────────────────────────────────────────────────
 
 async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
   const env      = getEnv();
@@ -248,24 +278,34 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
 
   logInfo(memberId, "SYNC_START", "RUNNING");
 
-  // ── 1. Identity ──────────────────────────────────────────────────────────
+  // ── 1. Identity ────────────────────────────────────────────────────────────
   const member = await getMemberById(memberId);
 
   let contact: WixContact | null = null;
   if (member.contactId) {
-    try { contact = await getContactById(member.contactId); }
-    catch { logWarn(memberId, "FETCH_CONTACT", "Contact unavailable — skipping"); }
+    try {
+      contact = await getContactById(member.contactId);
+    } catch {
+      logWarn(memberId, "FETCH_CONTACT", "Contact unavailable — skipping");
+    }
   }
 
-  const email = member.loginEmail?.trim() || existing?.email || contact?.primaryInfo?.email || "";
+  const email =
+    member.loginEmail?.trim() ||
+    existing?.email            ||
+    contact?.primaryInfo?.email ||
+    "";
 
-  // ── 2. Orders — fetch + de-duplicate ─────────────────────────────────────
+  // ── 2. Orders — fetch + de-duplicate ──────────────────────────────────────
   let rawOrders: WixOrder[] = [];
   try {
-    rawOrders = await searchOrdersByIdentity({ memberId, contactId: member.contactId, email });
+    rawOrders = await searchOrdersByIdentity({
+      memberId,
+      contactId: member.contactId,
+      email,
+    });
   } catch (e) {
     logError(memberId, "FETCH_ORDERS", e);
-    // If we have an existing ledger, return it rather than overwriting with empty data
     if (existing) {
       logWarn(memberId, "FETCH_ORDERS", "Using cached ledger after order fetch failure");
       return existing;
@@ -274,13 +314,17 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
   }
 
   const seenIds   = new Set<string>();
-  const uniqueRaw = rawOrders.filter((o) => { if (seenIds.has(o.id)) return false; seenIds.add(o.id); return true; });
-  const eligible  = uniqueRaw.filter(isEligibleOrder).map(toOrderSummary);
+  const uniqueRaw = rawOrders.filter((o) => {
+    if (seenIds.has(o.id)) return false;
+    seenIds.add(o.id);
+    return true;
+  });
+  const eligible = uniqueRaw.filter(isEligibleOrder).map(toOrderSummary);
 
   const totalPurchaseValue = eligible.reduce((s, o) => s + o.total, 0);
   const purchaseCreds      = Math.floor(totalPurchaseValue); // ₹1 = 1 Cred
 
-  // ── 3. Bonus Creds (idempotent) ───────────────────────────────────────────
+  // ── 3. Bonus Creds (idempotent) ────────────────────────────────────────────
   let bonusCreds              = existing?.bonusCreds            ?? 0;
   let welcomeBonusGrantedAt   = existing?.welcomeBonusGrantedAt ?? null;
   let birthdayBonusYears      = existing?.birthdayBonusYears    ?? [];
@@ -301,9 +345,9 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
     grantedBirthdayThisSync     = true;
   }
 
-  // ── 4. Compute final balance ──────────────────────────────────────────────
-  // INVARIANT: lifetimeCreds = purchaseCreds + bonusCreds
-  //            availableCreds = lifetimeCreds - redeemedCreds
+  // ── 4. Compute final balance ────────────────────────────────────────────────
+  //   INVARIANT: lifetimeCreds  = purchaseCreds + bonusCreds
+  //              availableCreds = lifetimeCreds  - redeemedCreds
   const lifetimeCreds  = purchaseCreds + bonusCreds;
   const redeemedCreds  = existing?.redeemedCreds ?? 0;
   const availableCreds = Math.max(lifetimeCreds - redeemedCreds, 0);
@@ -333,7 +377,7 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
 
   await repo.upsertMemberLedger(ledger);
 
-  // ── 5. Process new orders → order_history + EARN transactions ────────────
+  // ── 5. Process new orders → order_history + EARN transactions ───────────────
   const processedIds = await repo.getProcessedOrderIds(memberId);
   const rawMap       = new Map(uniqueRaw.map((o) => [o.id, o]));
   let newCount       = 0;
@@ -341,11 +385,10 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
   for (const order of eligible) {
     if (processedIds.has(order.id)) continue;
 
-    const rawOrder   = rawMap.get(order.id);
-    const couponCode = rawOrder ? extractCouponCode(rawOrder) : null;
+    const rawOrder    = rawMap.get(order.id);
+    const couponCode  = rawOrder ? extractCouponCode(rawOrder) : null;
     const credsEarned = Math.floor(order.total);
 
-    // Save order history FIRST. If this fails, skip EARN to allow retry.
     try {
       await repo.saveOrderHistory({
         orderId:    order.id,
@@ -363,34 +406,68 @@ async function _syncUnsafe(memberId: string): Promise<GridMemberLedger> {
     }
 
     if (credsEarned > 0) {
-      await ledgerService.recordEarnFromOrder(memberId, credsEarned, availableCreds, order.id);
-      logInfo(memberId, "ORDER_EARN", "OK", { orderId: order.id, credsEarned });
+      await ledgerService.recordEarnFromOrder(
+        memberId,
+        credsEarned,
+        availableCreds,
+        order.id,
+      );
+      logInfo(memberId, "ORDER_EARN", "OK", {
+        orderId: order.id,
+        credsEarned,
+      });
     }
 
     if (couponCode && rawOrder && isCouponGenuinelyApplied(rawOrder)) {
       const marked = await repo.markCouponUsed(couponCode, order.id, now);
-      if (marked) logInfo(memberId, "COUPON_MARK_USED", "OK", { couponCode, orderId: order.id });
+      if (marked) {
+        logInfo(memberId, "COUPON_MARK_USED", "OK", {
+          couponCode,
+          orderId: order.id,
+        });
+      }
     }
 
     newCount++;
   }
 
-  if (newCount > 0) logInfo(memberId, "NEW_ORDERS_PROCESSED", "COMPLETE", { count: newCount });
+  if (newCount > 0) {
+    logInfo(memberId, "NEW_ORDERS_PROCESSED", "COMPLETE", { count: newCount });
+  }
 
-  // ── 6. Bonus transactions ─────────────────────────────────────────────────
-  if (grantedWelcomeThisSync)
-    await ledgerService.recordBonus(memberId, env.WELCOME_BONUS_CREDITS, availableCreds, "WELCOME_BONUS");
-  if (grantedBirthdayThisSync)
-    await ledgerService.recordBonus(memberId, env.BIRTHDAY_BONUS_CREDITS, availableCreds, `BIRTHDAY_${year}`);
+  // ── 6. Bonus transactions ──────────────────────────────────────────────────
+  if (grantedWelcomeThisSync) {
+    await ledgerService.recordBonus(
+      memberId,
+      env.WELCOME_BONUS_CREDITS,
+      availableCreds,
+      "WELCOME_BONUS",
+    );
+  }
+  if (grantedBirthdayThisSync) {
+    await ledgerService.recordBonus(
+      memberId,
+      env.BIRTHDAY_BONUS_CREDITS,
+      availableCreds,
+      `BIRTHDAY_${year}`,
+    );
+  }
 
-  // ── 7. Expire stale coupons ───────────────────────────────────────────────
+  // ── 7. Expire stale coupons ────────────────────────────────────────────────
   const expired = await repo.expireStaleCoupons(memberId, now);
-  if (expired > 0) logInfo(memberId, "COUPONS_EXPIRED", "OK", { count: expired });
+  if (expired > 0) {
+    logInfo(memberId, "COUPONS_EXPIRED", "OK", { count: expired });
+  }
 
-  // ── 8. Balance verification (diagnostic) ─────────────────────────────────
+  // ── 8. Balance verification (diagnostic) ──────────────────────────────────
   await verifyBalance(memberId, ledger);
 
-  logInfo(memberId, "SYNC_COMPLETE", "OK", { lifetimeCreds, availableCreds, orders: eligible.length });
+  logInfo(memberId, "SYNC_COMPLETE", "OK", {
+    lifetimeCreds,
+    availableCreds,
+    orders: eligible.length,
+  });
+
   return ledger;
 }
 
@@ -402,11 +479,13 @@ export async function syncMemberById(memberId: string): Promise<GridMemberLedger
 
 export async function getDashboardForMember(
   memberId:  string,
-  forceSync  = false
+  forceSync  = false,
 ): Promise<GridDashboardData> {
   const repo = getRepository();
   let ledger = await repo.getMemberLedger(memberId);
-  if (!ledger || forceSync || isStale(ledger)) ledger = await syncMemberById(memberId);
+  if (!ledger || forceSync || isStale(ledger)) {
+    ledger = await syncMemberById(memberId);
+  }
 
   const [coupons, leaderboard, transactions] = await Promise.all([
     repo.listCouponsByMember(memberId, 20),
@@ -417,19 +496,36 @@ export async function getDashboardForMember(
   return buildDashboard(ledger, coupons, leaderboard, transactions);
 }
 
-export async function syncAllMembers(): Promise<{ total: number; synced: number; failed: number }> {
+export async function syncAllMembers(): Promise<{
+  total:  number;
+  synced: number;
+  failed: number;
+}> {
   const members = await queryAllMembers();
   let synced = 0, failed = 0;
+
   for (const m of members) {
-    try { await syncMemberById(m.id); synced++; }
-    catch (e) { failed++; logError(m.id, "BULK_SYNC", e); }
+    try {
+      await syncMemberById(m._id);
+      synced++;
+    } catch (e) {
+      failed++;
+      logError(m._id, "BULK_SYNC", e);
+    }
   }
-  console.info("[GRID_SYNC] [BULK] [COMPLETE]", { total: members.length, synced, failed });
+
+  console.info("[GRID_SYNC] [BULK] [COMPLETE]", {
+    total: members.length,
+    synced,
+    failed,
+  });
   return { total: members.length, synced, failed };
 }
 
 export async function assertLedgerExists(memberId: string): Promise<GridMemberLedger> {
   const ledger = await getRepository().getMemberLedger(memberId);
-  if (!ledger) throw new AppError(MSG.LEDGER_NOT_FOUND, 404, ErrorCode.LEDGER_NOT_FOUND);
+  if (!ledger) {
+    throw new AppError(MSG.LEDGER_NOT_FOUND, 404, ErrorCode.LEDGER_NOT_FOUND);
+  }
   return ledger;
 }
