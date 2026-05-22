@@ -66,27 +66,55 @@ export async function generateOAuthLoginData(
   redirectUri: string,
   originalUri: string
 ): Promise<{ oauthData: OauthData; loginUrl: string }> {
+
   try {
-    const client = createHeadlessWixClient();
 
-    // New Wix SDK signature
-    const oauthData = client.auth.generateOAuthData(originalUri);
+    const client =
+      createHeadlessWixClient();
 
-    // New Wix SDK returns Promise<{ authUrl: string }>
-    const { authUrl: loginUrl } = await client.auth.getAuthUrl(
-      oauthData
+    // IMPORTANT:
+    // SDK expects ORIGINAL URI here
+    const oauthData =
+      client.auth.generateOAuthData(
+        originalUri
+      );
+
+    // CRITICAL:
+    // override redirect URI BEFORE generating URL
+    oauthData.redirectUri =
+      redirectUri;
+
+    console.log(
+      "[GRID_AUTH] redirectUri =",
+      redirectUri
     );
 
-    // Preserve redirect URI manually because newer SDK versions
-    // no longer inject it automatically.
-    oauthData.redirectUri = redirectUri;
+    console.log(
+      "[GRID_AUTH] oauth redirectUri =",
+      oauthData.redirectUri
+    );
+
+    const { authUrl: loginUrl } =
+      await client.auth.getAuthUrl(
+        oauthData
+      );
+
+    console.log(
+      "[GRID_AUTH] loginUrl =",
+      loginUrl
+    );
 
     return {
       oauthData,
       loginUrl,
     };
+
   } catch (error) {
-    console.error("[GRID_AUTH] generateOAuthLoginData failed:", error);
+
+    console.error(
+      "[GRID_AUTH] generateOAuthLoginData failed:",
+      error
+    );
 
     throw new AppError(
       MSG.INTERNAL_ERROR,
