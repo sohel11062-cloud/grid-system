@@ -10,6 +10,7 @@ import {
 import { contacts } from "@wix/crm";
 import { members } from "@wix/members";
 import { products } from "@wix/stores";
+import { orders } from "@wix/ecom";
 
 import { AppError, ErrorCode } from "@/server/errors";
 import { MSG } from "@/server/brand";
@@ -30,12 +31,24 @@ export interface WixMemberInfo {
 
 export function createHeadlessWixClient(tokens?: Tokens) {
   const { WIX_CLIENT_ID } = getEnv();
+
   return createClient({
-    modules: { products, members, contacts },
-    auth:    OAuthStrategy(
+    modules: {
+  products,
+  members,
+  contacts,
+  orders,
+},
+
+    auth: OAuthStrategy(
       tokens
-        ? { clientId: WIX_CLIENT_ID, tokens }
-        : { clientId: WIX_CLIENT_ID }
+        ? {
+            clientId: WIX_CLIENT_ID,
+            tokens,
+          }
+        : {
+            clientId: WIX_CLIENT_ID,
+          }
     ),
   });
 }
@@ -196,13 +209,11 @@ export async function refreshWixTokens(
         },
       });
 
-    // New Wix SDK replacement flow
-    const visitorTokens =
+    const tokens =
       await client.auth.generateVisitorTokens();
 
     return {
-      accessToken:
-        visitorTokens.accessToken,
+      accessToken: tokens.accessToken,
 
       refreshToken: {
         value: refreshToken,
@@ -227,18 +238,22 @@ export async function refreshWixTokens(
 
 // ─── Fetch the currently-authenticated member's profile ──────────────────────
 
-export async function getAuthenticatedMember(tokens: Tokens): Promise<WixMemberInfo> {
-  try {
-    const client = createHeadlessWixClient(tokens);
+export async function getAuthenticatedMember(
+  tokens: Tokens
+): Promise<WixMemberInfo> {
 
-    // "FULL" fieldset returns profile + contact details needed for username resolution.
-    // `as const` ensures TypeScript infers "FULL" as a string literal, which satisfies
-    // the SDK's enum-based fieldset type (e.g. MemberFieldSet | "FULL" | ...).
-    const { member } = await client.members.getCurrentMember({
-      fieldsets: ["FULL" as const],
-    });
+  try {
+
+    const client =
+      createHeadlessWixClient(tokens);
+
+    const { member } =
+      await client.members.getCurrentMember({
+        fieldsets: ["FULL" as const],
+      });
 
     if (!member) {
+
       throw new AppError(
         "Wix returned an empty member payload.",
         401,
@@ -246,12 +261,14 @@ export async function getAuthenticatedMember(tokens: Tokens): Promise<WixMemberI
       );
     }
 
-    // `_id` is the canonical field in the Members v1 API.
-    // Capture before the guard so TypeScript can narrow the type.
-    const id:         string | null | undefined = member._id;
-    const loginEmail: string | null | undefined = member.loginEmail;
+    const id =
+      member._id;
+
+    const loginEmail =
+      member.loginEmail;
 
     if (!id || !loginEmail) {
+
       throw new AppError(
         "Wix did not return a usable member identity.",
         401,
@@ -260,19 +277,45 @@ export async function getAuthenticatedMember(tokens: Tokens): Promise<WixMemberI
     }
 
     return {
+
       id,
+
       loginEmail,
-      contactId:  member.contactId          ?? null,
-      profile:    { nickname:   member.profile?.nickname   ?? null },
-      contact:    {
-        firstName: member.contact?.firstName ?? null,
-        lastName:  member.contact?.lastName  ?? null,
+
+      contactId:
+        member.contactId ?? null,
+
+      profile: {
+        nickname:
+          member.profile?.nickname ?? null,
+      },
+
+      contact: {
+
+        firstName:
+          member.contact?.firstName ?? null,
+
+        lastName:
+          member.contact?.lastName ?? null,
       },
     };
+
   } catch (error) {
-    if (error instanceof AppError) throw error;
-    console.error("[GRID_AUTH] getCurrentMember failed:", error);
-    throw new AppError(MSG.AUTH_REQUIRED, 401, ErrorCode.AUTH_REQUIRED);
+
+    if (error instanceof AppError) {
+      throw error;
+    }
+
+    console.error(
+      "[GRID_AUTH] getCurrentMember failed:",
+      error
+    );
+
+    throw new AppError(
+      MSG.AUTH_REQUIRED,
+      401,
+      ErrorCode.AUTH_REQUIRED
+    );
   }
 }
 

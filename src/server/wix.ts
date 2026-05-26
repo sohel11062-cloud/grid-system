@@ -153,14 +153,19 @@ async function withRetry<T>(
 
 // ─── Duplicate coupon-code detection ─────────────────────────────────────────
 
-export function isDuplicateCodeError(error: unknown): boolean {
-  if (!(error instanceof AppError)) return false;
-  if (error.status !== 400 && error.status !== 409) return false;
-  const details = JSON.stringify(error.details ?? "").toLowerCase();
+export function isDuplicateCodeError(
+  error: unknown
+): boolean {
+
+  const msg =
+    error instanceof Error
+      ? error.message
+      : String(error);
+
   return (
-    details.includes("duplicate")     ||
-    details.includes("already exist") ||
-    details.includes("unique")
+    msg.includes("already exists") ||
+    msg.includes("duplicate") ||
+    msg.includes("409")
   );
 }
 
@@ -258,59 +263,110 @@ export async function searchOrdersByIdentity(identity: {
 
 // ─── Coupons (admin REST API) ─────────────────────────────────────────────────
 
-export async function createMoneyOffCoupon(input: {
-  code:   string;
+export interface WixCouponCreateResponse {
+  coupon?: {
+    id?: string;
+    code?: string;
+  };
+}
+
+export async function createMoneyOffCoupon({
+  code,
+  amount,
+}: {
+  code: string;
   amount: number;
 }): Promise<WixCouponCreateResponse> {
-  const { WIX_COUPONS_ENDPOINT, GRID_COUPON_SCOPE_NAMESPACE } = getEnv();
-  const numericAmount = Number(input.amount);
 
-  if (
-    !Number.isFinite(numericAmount) ||
-    numericAmount <= 0              ||
-    !Number.isInteger(numericAmount)
-  ) {
-    throw new AppError(MSG.VALIDATION_ERROR, 400, ErrorCode.VALIDATION_ERROR);
-  }
+  const { WIX_API_KEY } = getEnv();
 
-  const code = input.code.trim();
-  if (!code || code.length < 4) {
-    throw new AppError(MSG.VALIDATION_ERROR, 400, ErrorCode.VALIDATION_ERROR);
-  }
+  if (!WIX_API_KEY) {
 
-  const nowMs    = Date.now();
-  const expiryMs = nowMs + 365 * 24 * 60 * 60 * 1_000;
-
-  const payload: JsonBody = {
-    specification: {
-      name:           `THE GRID — ₹${numericAmount} REWARD`,
-      code,
-      startTime:      String(nowMs),
-      expirationTime: String(expiryMs),
-      active:         true,
-      usageLimit:     1,
-      scope:          { namespace: GRID_COUPON_SCOPE_NAMESPACE || "stores" },
-      type:           "MoneyOff",
-      moneyOffAmount: numericAmount,
-    },
-  };
-
-  console.info("[GRID_WIX] Creating coupon via Stores v2:", {
-    code,
-    amount: numericAmount,
-  });
-
-  const res = await wixRequest<WixCouponCreateResponse>(WIX_COUPONS_ENDPOINT, {
-    method:   "POST",
-    bodyJson: payload,
-  });
-
-  if (!res.coupon?.id) {
-    console.error(
-      "[GRID_WIX] Coupon API returned 200 but no coupon.id — verify API key permissions",
+    throw new AppError(
+      "Missing WIX_API_KEY environment variable.",
+      500,
+      ErrorCode.INTERNAL_ERROR,
     );
-    throw new AppError(MSG.COUPON_ID_MISSING, 500, ErrorCode.COUPON_CREATE_FAILED);
   }
 
-  return res;
+  const response = await fetch(
+    "https://www.wixapis.com/stores/v2/coupons",
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+
+        Authorization: WIX_API_KEY,
+      },
+
+      body: JSON.stringify({
+        specification: {
+
+          name:
+            `GRID-${code}`,
+
+          code,
+
+          active: true,
+
+          usageLimit: 1,
+
+          scope: {
+            namespace: "stores",
+          },
+
+          startTime:
+            Date.now().toString(),
+
+          expirationTime:
+            (
+              Date.now() +
+              365 * 24 * 60 * 60 * 1000
+            ).toString(),
+
+          moneyOffAmount: {
+            amount: amount.toString(),
+            currency: "INR",
+          },
+        },
+      }),
+    }
+  );
+
+  const text =
+    await response.text();
+
+  console.log(
+    "[WIX_COUPON_RAW_RESPONSE]",
+    response.status,
+    text
+  );
+
+  if (!response.ok) {
+
+    throw new AppError(
+      `Wix coupon creation failed: ${response.status}`,
+      502,
+      ErrorCode.COUPON_CREATE_FAILED,
+    );
+  }
+
+  let data: WixCouponCreateResponse;
+
+  try {
+
+    data =
+      JSON.parse(text);
+
+  } catch {
+
+    throw new AppError(
+      "Invalid Wix coupon response.",
+      502,
+      ErrorCode.COUPON_CREATE_FAILED,
+    );
+  }
+
+  return data;
 }

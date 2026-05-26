@@ -107,21 +107,59 @@ export async function redeemMemberCreds(
   let lastError:   unknown;
 
   for (let attempt = 1; attempt <= MAX_CODE_ATTEMPTS; attempt++) {
-    const code = createCouponCode();
-    try {
-      const res   = await createMoneyOffCoupon({ code, amount: rupeeInt });
-      wixCouponId = res.coupon!.id!;
-      finalCode   = code;
-      break;
-    } catch (err) {
-      lastError = err;
-      if (isDuplicateCodeError(err) && attempt < MAX_CODE_ATTEMPTS) {
-        logWarn(memberId, "COUPON_CREATE", `Duplicate code attempt ${attempt} — regenerating`);
-        continue;
-      }
-      break;
+
+  const code =
+    createCouponCode();
+
+  try {
+
+    const res =
+      await createMoneyOffCoupon({
+        code,
+        amount: rupeeInt,
+      });
+
+    console.log(
+      "[WIX_COUPON_RESPONSE]",
+      JSON.stringify(res, null, 2)
+    );
+
+    wixCouponId =
+  res?.coupon?.id ??
+  undefined;
+
+    finalCode =
+      code;
+
+    break;
+
+  } catch (err) {
+
+    lastError =
+      err;
+
+    console.error(
+      "[WIX_COUPON_CREATE_ERROR]",
+      err
+    );
+
+    if (
+      isDuplicateCodeError(err) &&
+      attempt < MAX_CODE_ATTEMPTS
+    ) {
+
+      logWarn(
+        memberId,
+        "COUPON_CREATE",
+        `Duplicate code attempt ${attempt} — regenerating`
+      );
+
+      continue;
     }
+
+    break;
   }
+}
 
   // ── Failed — save audit record, do NOT deduct Creds ───────────────────────
   if (!wixCouponId || !finalCode) {

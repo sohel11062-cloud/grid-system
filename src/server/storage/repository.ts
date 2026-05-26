@@ -235,7 +235,12 @@ function asUser(
     fraudHold: ledger.fraudHold ?? existing?.fraudHold ?? false,
     fraudScore: ledger.fraudScore ?? existing?.fraudScore ?? 0,
     fraudSignals: ledger.fraudSignals ?? existing?.fraudSignals ?? [],
-    roles: identity?.roles ?? existing?.roles ?? ["member"],
+    roles:
+  identity?.roles?.length
+    ? identity.roles
+    : existing?.roles?.length
+      ? existing.roles
+      : ["member"],
     status: existing?.status ?? "ACTIVE",
     lastLoginAt: identity?.lastLoginAt ?? existing?.lastLoginAt ?? null,
     moderatedAt: existing?.moderatedAt ?? null,
@@ -337,7 +342,12 @@ class MemoryGridRepository implements GridRepository {
     if (!user) return null;
     const updated = {
       ...user,
-      roles: Array.from(new Set([...user.roles, role])),
+      roles: Array.from(
+  new Set([
+    ...(user.roles ?? ["member"]),
+    role,
+  ]),
+),
       updatedAt: now,
     };
     this.members.set(memberId, updated);
@@ -382,7 +392,10 @@ class MemoryGridRepository implements GridRepository {
       ...user,
       adjustmentCreds: user.adjustmentCreds + amount,
       lifetimeCreds: Math.max(user.lifetimeCreds + amount, 0),
-      availableCreds: user.availableCreds + amount,
+      availableCreds: Math.max(
+  user.availableCreds + amount,
+  0,
+),
       updatedAt: now,
     };
     this.members.set(memberId, updated);
@@ -903,7 +916,10 @@ class MongoGridRepository implements GridRepository {
       .findOneAndUpdate(
         { memberId, status: "ACTIVE", fraudHold: { $ne: true }, availableCreds: { $gte: creds } },
         {
-          $inc: { redeemedCreds: creds, availableCreds: -creds },
+          $inc: {
+  redeemedCreds: creds,
+  availableCreds: -Math.abs(creds),
+},
           $set: { updatedAt: now },
         },
         { returnDocument: "after", projection: { _id: 0 } },

@@ -73,9 +73,18 @@ export async function ensureUserFromSession(
   const repo = getRepository();
   const now = new Date().toISOString();
   const existing = await repo.getUser(session.memberId);
-  const roles = Array.from(
-    new Set([...(existing?.roles ?? []), ...bootstrapRolesForSession(session)]),
-  );
+  const bootstrapRoles =
+  bootstrapRolesForSession(session);
+
+const roles =
+  existing?.roles?.includes("owner")
+    ? Array.from(
+        new Set([
+          ...existing.roles,
+          ...bootstrapRoles,
+        ])
+      )
+    : bootstrapRoles;
 
   const ledger = await repo.getMemberLedger(session.memberId) ??
     emptyLedgerFromSession(session, now);
