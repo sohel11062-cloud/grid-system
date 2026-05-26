@@ -720,27 +720,42 @@ class MongoGridRepository implements GridRepository {
   }
 
   async upsertUserFromLedger(
-    ledger: GridMemberLedger,
-    identity?: { roles?: GridUserRole[]; lastLoginAt?: string | null },
-  ) {
-    const db = await this.db();
-    const existing = await this.getUser(ledger.memberId);
-    const user = asUser(ledger, existing, identity);
-    await db.collection<GridUser>(COL_USERS).updateOne(
-      { memberId: ledger.memberId },
-      {
-        $set: {
-          ...user,
-          roles: user.roles,
-          status: user.status,
-          lastLoginAt: user.lastLoginAt,
-        },
-        $setOnInsert: { createdAt: user.createdAt },
+  ledger: GridMemberLedger,
+  identity?: { roles?: GridUserRole[]; lastLoginAt?: string | null },
+) {
+  const db = await this.db();
+
+  const existing = await this.getUser(ledger.memberId);
+
+  const user = asUser(ledger, existing, identity);
+
+  // IMPORTANT:
+  // Prevent MongoDB conflict:
+  // createdAt must NEVER exist in both
+  // $set and $setOnInsert.
+  const { createdAt, ...safeUser } = user;
+
+  await db.collection<GridUser>(COL_USERS).updateOne(
+    { memberId: ledger.memberId },
+    {
+      $set: {
+        ...safeUser,
+        roles: user.roles,
+        status: user.status,
+        lastLoginAt: user.lastLoginAt,
+        updatedAt: new Date().toISOString(),
       },
-      { upsert: true },
-    );
-    return user;
-  }
+
+      $setOnInsert: {
+        createdAt: createdAt ?? new Date().toISOString(),
+      },
+    },
+
+    { upsert: true },
+  );
+
+  return user;
+}
 
   async listUsers(opts?: {
     limit?: number;
