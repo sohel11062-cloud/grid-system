@@ -703,7 +703,7 @@ export function HologramScene() {
           z-0
           h-full
           w-full
-          opacity-[0.60]
+          opacity-[0.45]
         "
         aria-hidden
       />
@@ -738,7 +738,7 @@ export function HologramScene() {
           fixed
           inset-0
           z-0
-          opacity-[0.03]
+          opacity-[0.015]
         "
         aria-hidden
         style={{

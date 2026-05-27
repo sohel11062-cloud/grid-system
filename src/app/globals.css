@@ -250,8 +250,8 @@ body {
     ),
     rgba(6,10,18,0.82);
 
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(24px) saturate(140%);
+-webkit-backdrop-filter: blur(24px) saturate(140%);
 
    color: rgba(255,255,255,0.94);
    
@@ -744,4 +744,34 @@ html {
 
 section {
   position: relative;
+}
+
+@media (max-width: 768px) {
+
+  .panel-shell {
+
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.03),
+      0 20px 50px rgba(0,0,0,0.45);
+
+  }
+
+  .panel-shell::before {
+    opacity: 0.08;
+  }
+
+}
+
+@media (max-width: 768px) {
+
+  .animate-nebulaFloat,
+  .animate-nebulaFloatSlow {
+
+    animation-duration: 30s !important;
+
+  }
+
 }

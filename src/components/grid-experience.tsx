@@ -440,8 +440,11 @@ export function GridExperience() {
     !dashboard
   ) {
     return (
-      <main className="relative flex min-h-screen items-center justify-center overflow-x-hidden">
-        <HologramScene />
+  <main className="relative flex min-h-screen items-center justify-center overflow-x-hidden">
+
+    <div className="hidden md:block">
+      <HologramScene />
+    </div>
 
         <div className="panel-shell relative z-10 w-full max-w-md text-center">
           <p className="panel-title">
@@ -467,8 +470,11 @@ export function GridExperience() {
     !dashboard
   ) {
     return (
-      <main className="relative min-h-screen overflow-x-hidden">
-        <HologramScene />
+  <main className="relative min-h-screen overflow-x-hidden">
+
+    <div className="hidden md:block">
+      <HologramScene />
+    </div>
 
         <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-16">
           <div className="panel-shell max-w-2xl">
@@ -506,8 +512,11 @@ export function GridExperience() {
       : 0;
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden px-4 py-6 md:px-6 md:py-8">
+  <main className="relative min-h-screen overflow-x-hidden px-4 py-6 md:px-6 md:py-8">
+
+    <div className="hidden md:block">
       <HologramScene />
+    </div>
 
       <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6">
 
