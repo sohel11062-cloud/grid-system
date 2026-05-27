@@ -248,11 +248,13 @@ body {
       rgba(255,255,255,0.08),
       rgba(255,255,255,0.02)
     ),
-    rgba(10,14,28,0.58);
+    rgba(6,10,18,0.82);
 
-  backdrop-filter: blur(40px) saturate(160%);
-  -webkit-backdrop-filter: blur(40px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
 
+   color: rgba(255,255,255,0.94);
+   
   box-shadow:
     0 0 0 1px rgba(255,255,255,0.04),
     0 40px 120px rgba(0,0,0,0.65),
@@ -302,7 +304,7 @@ body {
   animation:
     rotateAurora 20s linear infinite;
 
-  opacity: 0.35;
+  opacity: 0.12;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────

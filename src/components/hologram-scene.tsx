@@ -703,7 +703,7 @@ export function HologramScene() {
           z-0
           h-full
           w-full
-          opacity-[0.95]
+          opacity-[0.60]
         "
         aria-hidden
       />
@@ -721,8 +721,8 @@ export function HologramScene() {
         style={{
           background:
             `
-            radial-gradient(circle at 20% 30%, rgba(77,247,255,0.12), transparent 30%),
-            radial-gradient(circle at 80% 20%, rgba(167,139,250,0.12), transparent 30%),
+            radial-gradient(circle at 20% 30%, rgba(77,247,255,0.05), transparent 30%),
+            radial-gradient(circle at 80% 20%, rgba(167,139,250,0.05), transparent 30%),
             radial-gradient(circle at 50% 80%, rgba(232,121,249,0.10), transparent 35%),
             radial-gradient(circle at center, rgba(59,130,246,0.08), transparent 45%),
             linear-gradient(180deg, #02030a 0%, #050816 100%)
@@ -767,7 +767,7 @@ export function HologramScene() {
             radial-gradient(
               circle at center,
               transparent 40%,
-              rgba(0,0,0,0.45) 100%
+              rgba(0,0,0,0.22) 100%
             )
             `,
         }}
