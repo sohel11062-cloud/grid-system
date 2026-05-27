@@ -77,6 +77,17 @@ export interface WixOrder {
       original?: string;
     };
   }>;
+
+  appliedCoupon?: {
+    couponId?: string;
+    name?: string;
+    code?: string;
+
+    discount?: {
+      amount?: string | number;
+      currency?: string;
+    };
+  };
 }
 
 export interface WixCoupon {

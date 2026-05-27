@@ -573,11 +573,11 @@ export async function syncAllMembers(): Promise<{
 
   for (const m of members) {
     try {
-      await syncMemberById(m._id);
+      await syncMemberById(m.id);
       synced++;
     } catch (e) {
       failed++;
-      logError(m._id, "BULK_SYNC", e);
+      logError(m.id, "BULK_SYNC", e);
     }
   }
 
