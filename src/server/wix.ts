@@ -91,12 +91,7 @@ export interface WixOrder {
 }
 
 export interface WixCouponCreateResponse {
-  id?: string;
-
-  coupon?: {
-    id?: string;
-    code?: string;
-  };
+  id: string;
 }
 
 export interface WixCoupon {
@@ -191,10 +186,6 @@ async function wixRequest<T>(
     `Bearer ${env.WIX_API_KEY}`,
   );
 
-  headers.set(
-    "wix-site-id",
-    env.WIX_SITE_ID,
-  );
 
   let response: Response;
 
@@ -279,14 +270,19 @@ async function wixRequest<T>(
 
   if (!response.ok) {
 
-    console.error(
-      "[GRID_WIX_API_ERROR]",
-      {
-        url,
-        status: response.status,
-        response: data,
-      },
-    );
+  console.error(
+    "[GRID_WIX_API_ERROR]",
+    {
+      url,
+      status: response.status,
+      response: data,
+    },
+  );
+
+  console.error(
+    "[GRID_WIX_FULL_RESPONSE]",
+    JSON.stringify(data, null, 2),
+  );
 
     throw new AppError(
       MSG.INTERNAL_ERROR,
@@ -635,8 +631,8 @@ export async function createMoneyOffCoupon({
         expirationTime.toString(),
 
       scope: {
-        namespace: "stores",
-      },
+  namespace: "wix-stores",
+},
 
       // IMPORTANT:
       // MUST BE NUMBER
@@ -665,10 +661,7 @@ export async function createMoneyOffCoupon({
     response,
   );
 
-  if (
-    !response?.id &&
-    !response?.coupon?.id
-  ) {
+  if (!response?.id) {
 
     console.error(
       "[GRID_WIX_INVALID_COUPON_RESPONSE]",
@@ -743,9 +736,11 @@ export async function queryCouponsByCode(
 
             bodyJson: {
               query: {
-                filter: JSON.stringify({
-                  "specification.code": code,
-                }),
+                filter: {
+  "specification.code": {
+    $eq: code,
+  },
+},
               },
             },
           },

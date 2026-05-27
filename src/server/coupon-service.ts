@@ -29,6 +29,7 @@ import { getRepository } from "@/server/storage/repository";
 
 import {
   createMoneyOffCoupon,
+  deleteCoupon,
   isDuplicateCodeError,
 } from "@/server/wix";
 
@@ -296,9 +297,8 @@ export async function redeemMemberCreds(
       );
 
       wixCouponId =
-        response?.id ??
-        response?.coupon?.id ??
-        undefined;
+  response?.id ??
+  undefined;
 
       if (!wixCouponId) {
 
@@ -318,12 +318,18 @@ export async function redeemMemberCreds(
         error;
 
       console.error(
-        "[GRID_WIX_COUPON_CREATE_ERROR]",
-        {
-          attempt,
-          error,
-        },
-      );
+  "[GRID_WIX_COUPON_CREATE_ERROR]",
+  {
+    attempt,
+
+    message:
+      error instanceof Error
+        ? error.message
+        : String(error),
+
+    error,
+  },
+);
 
       // DUPLICATE CODE RETRY
       if (
@@ -486,6 +492,31 @@ export async function redeemMemberCreds(
         wixCouponId,
       },
     );
+
+    try {
+
+  if (wixCouponId) {
+
+    await deleteCoupon(
+      wixCouponId,
+    );
+
+    console.log(
+      "[GRID_WIX_COUPON_ROLLBACK_SUCCESS]",
+      {
+        memberId,
+        wixCouponId,
+      },
+    );
+  }
+
+} catch (rollbackError) {
+
+  console.error(
+    "[GRID_WIX_COUPON_ROLLBACK_FAILED]",
+    rollbackError,
+  );
+}
 
     await repo.updateRedemption(
       redemption.id,
