@@ -255,7 +255,14 @@ export function AdminConsole() {
     useState("SEASONAL_DROP");
 
   const [campaignTarget, setCampaignTarget] =
-    useState("ALL_USERS");
+  useState("ALL_USERS");
+
+const [campaignType, setCampaignType] =
+  useState<
+    "GLOBAL" |
+    "TIER" |
+    "EVENT"
+  >("GLOBAL");
 
   const [orderId, setOrderId] =
     useState("");
@@ -284,14 +291,15 @@ export function AdminConsole() {
         setData(payload);
 
         if (
-          !memberId &&
-          payload.users[0]
-        ) {
-
-          setMemberId(
-            payload.users[0].memberId,
-          );
-        }
+  payload.users.length > 0 &&
+  !payload.users.some(
+    (u) => u.memberId === memberId,
+  )
+) {
+  setMemberId(
+    payload.users[0].memberId,
+  );
+}
 
       } catch (err) {
 
@@ -964,7 +972,106 @@ export function AdminConsole() {
               </div>
 
             </section>
+<section className="panel-shell">
 
+  <div className="flex items-center justify-between">
+
+    <div>
+
+      <p className="panel-title">
+        CAMPAIGN ENGINE
+      </p>
+
+      <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
+        Bonus Distribution
+      </h2>
+
+    </div>
+
+    <span className="data-chip">
+      LIVE
+    </span>
+
+  </div>
+
+  <div className="mt-6 grid gap-4 md:grid-cols-2">
+
+    <input
+      className="grid-input"
+      placeholder="Campaign amount"
+      value={campaignAmount}
+      onChange={(e) =>
+        setCampaignAmount(
+          e.target.value,
+        )
+      }
+    />
+
+    <select
+      className="grid-input"
+      value={campaignType}
+      onChange={(e) =>
+        setCampaignType(
+          e.target.value as
+            | "GLOBAL"
+            | "TIER"
+            | "EVENT",
+        )
+      }
+    >
+
+      <option value="GLOBAL">
+        GLOBAL
+      </option>
+
+      <option value="TIER">
+        TIER
+      </option>
+
+      <option value="EVENT">
+        EVENT
+      </option>
+
+    </select>
+
+    <input
+      className="grid-input md:col-span-2"
+      placeholder="Event Key / Campaign Reason"
+      value={eventKey}
+      onChange={(e) =>
+        setEventKey(
+          e.target.value,
+        )
+      }
+    />
+
+  </div>
+
+  <button
+    className="grid-button mt-5 w-full"
+    onClick={() =>
+      mutate(
+        "/api/admin/campaigns/bonus",
+        {
+          amount:
+            Number(
+              campaignAmount,
+            ),
+
+          reason:
+            eventKey,
+
+          campaignType,
+        },
+      )
+    }
+  >
+
+    Launch Campaign
+
+  </button>
+
+</section>
             {/* LIVE SYSTEM FEED */}
 
             <section className="panel-shell">
