@@ -470,7 +470,7 @@ export function GridExperience() {
     !dashboard
   ) {
     return (
-  <main className="relative min-h-screen overflow-x-hidden">
+  <main className="relative min-h-screen overflow-x-hidden overflow-y-auto touch-pan-y">
 
     <div className="hidden md:block">
       <HologramScene />
@@ -512,7 +512,7 @@ export function GridExperience() {
       : 0;
 
   return (
-  <main className="relative min-h-screen overflow-x-hidden px-4 py-6 md:px-6 md:py-8">
+  <main className="relative min-h-screen overflow-x-hidden overflow-y-auto touch-pan-y px-4 py-6 md:px-6 md:py-8">
 
     <div className="hidden md:block">
       <HologramScene />

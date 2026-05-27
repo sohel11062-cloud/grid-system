@@ -414,6 +414,16 @@ export interface GridCampaign {
   createdAt: string;
 }
 
+// ─── Economy config ──────────────────────────────────────────────────────────
+
+export interface GridEconomyConfig {
+  credsPerRupee: number;
+
+  updatedAt: string;
+
+  updatedBy?: string;
+}
+
 // ─── Tier definitions ─────────────────────────────────────────────────────────
 
 export const GRID_TIERS: GridTier[] = [

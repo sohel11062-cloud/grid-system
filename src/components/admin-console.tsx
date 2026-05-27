@@ -206,6 +206,11 @@ export function AdminConsole() {
       null,
     );
 
+  const isOwner =
+  data?.admin.roles.includes(
+    "owner",
+  ) ?? false;
+
   const [loading, setLoading] =
     useState(true);
 
@@ -256,6 +261,9 @@ export function AdminConsole() {
 
   const [campaignTarget, setCampaignTarget] =
   useState("ALL_USERS");
+
+  const [conversionRate, setConversionRate] =
+  useState("100");
 
 const [campaignType, setCampaignType] =
   useState<
@@ -504,7 +512,7 @@ const [campaignType, setCampaignType] =
   // ───────────────────────────────────────────────────────────────────────────
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden overflow-y-auto px-4 py-4 md:px-6 md:py-6">
+    <main className="relative min-h-screen overflow-x-hidden overflow-y-auto touch-pan-y px-4 py-6 md:px-6 md:py-8">
 
       <HologramScene />
 
@@ -1072,6 +1080,78 @@ const [campaignType, setCampaignType] =
   </button>
 
 </section>
+
+{/* ECONOMY CONTROL */}
+
+{data.admin.roles.includes("owner") && (
+
+  <section className="panel-shell">
+
+    <div className="flex items-center justify-between">
+
+      <div>
+
+        <p className="panel-title">
+          ECONOMY CONTROL
+        </p>
+
+        <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
+          Cred Conversion Engine
+        </h2>
+
+      </div>
+
+      <span className="data-chip">
+        OWNER ONLY
+      </span>
+
+    </div>
+
+    <div className="mt-6 grid gap-4 md:grid-cols-2">
+
+      <div>
+
+        <p className="mb-2 text-[10px] uppercase tracking-[0.28em] text-grid-muted">
+          Creds Required For ₹1
+        </p>
+
+        <input
+          className="grid-input"
+          value={conversionRate}
+          onChange={(e) =>
+            setConversionRate(
+              e.target.value,
+            )
+          }
+          placeholder="100"
+        />
+
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+
+        <p className="text-[10px] uppercase tracking-[0.24em] text-grid-muted">
+          Preview
+        </p>
+
+        <p className="mt-3 text-lg text-white">
+          {conversionRate} Creds = ₹1
+        </p>
+
+      </div>
+
+    </div>
+
+    <button
+      className="grid-button mt-5"
+    >
+      Update Economy
+    </button>
+
+  </section>
+
+)}
+
             {/* LIVE SYSTEM FEED */}
 
             <section className="panel-shell">
