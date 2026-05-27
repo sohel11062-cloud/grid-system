@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
-let CURRENT_CONVERSION_RATE = 100;
+import {
+  getConversionRate,
+  setConversionRate,
+} from "@/server/economy";
 
 export async function POST(
   request: Request,
@@ -34,13 +37,14 @@ export async function POST(
       );
     }
 
-    CURRENT_CONVERSION_RATE =
-      conversionRate;
+    setConversionRate(
+  conversionRate,
+);
 
     return NextResponse.json({
       success: true,
       conversionRate:
-        CURRENT_CONVERSION_RATE,
+  getConversionRate(),
     });
 
   } catch {
@@ -61,6 +65,6 @@ export async function GET() {
 
   return NextResponse.json({
     conversionRate:
-      CURRENT_CONVERSION_RATE,
+  getConversionRate(),
   });
 }

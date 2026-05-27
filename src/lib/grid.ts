@@ -501,8 +501,25 @@ export function rupeesToCreds(rupees: number): number {
 }
 
 /** 100 Creds = ₹1 */
-export function credsToRupees(creds: number): number {
-  return Math.max(Number((creds / 100).toFixed(2)), 0);
+import {
+  getConversionRate,
+} from "@/server/economy";
+
+export function credsToRupees(
+  creds: number,
+): number {
+
+  const rate =
+    getConversionRate();
+
+  return Math.max(
+    Number(
+      (
+        creds / rate
+      ).toFixed(2),
+    ),
+    0,
+  );
 }
 
 /**
