@@ -9,6 +9,12 @@ import { randomBytes } from "crypto";
  * Entropy: 96 bits — collision probability is negligible at millions of codes.
  */
 export function createCouponCode(): string {
-  const seg = (): string => randomBytes(4).toString("hex").toUpperCase();
-  return `GRID-${seg()}-${seg()}-${seg()}`;
+
+  const random =
+    crypto.randomUUID()
+      .replace(/-/g, "")
+      .slice(0, 10)
+      .toUpperCase();
+
+  return `GRID-${random}`;
 }
