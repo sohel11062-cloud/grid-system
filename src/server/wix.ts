@@ -281,44 +281,35 @@ async function wixRequest<T>(
 
   if (!response.ok) {
 
-    const bodyObj =
-      typeof json === "object" &&
-      json !== null
-        ? json as Record<string, unknown>
-        : {};
+  console.error(
+    "[GRID_WIX_API_ERROR_FULL]",
+    {
+      url,
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+      response: json,
+      rawText: text,
+    },
+  );
 
-    const message =
-      typeof bodyObj.message === "string"
-        ? bodyObj.message
-        : typeof bodyObj.error === "string"
-          ? bodyObj.error
-          : `Wix API error — HTTP ${response.status}`;
+  const message =
+    typeof json === "object" &&
+    json !== null &&
+    "message" in json
+      ? String((json as Record<string, unknown>).message)
+      : `Wix API error (${response.status})`;
 
-    console.error(
-      "[GRID_WIX_API_ERROR]",
-      {
-        url,
-        status: response.status,
-        errorCode:
-          bodyObj.errorCode ??
-          bodyObj.code ??
-          null,
-        message,
-      },
-    );
-
-    throw new AppError(
-      message,
-      response.status,
-      ErrorCode.WIX_API_ERROR,
-      {
-        status: response.status,
-        errorCode:
-          bodyObj.errorCode ??
-          bodyObj.code,
-      },
-    );
-  }
+  throw new AppError(
+    message,
+    response.status,
+    ErrorCode.WIX_API_ERROR,
+    {
+      status: response.status,
+      response: json,
+      rawText: text,
+    },
+  );
+}
 
   return json as T;
 }
