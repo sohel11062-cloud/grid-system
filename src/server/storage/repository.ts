@@ -470,10 +470,10 @@ class MemoryGridRepository implements GridRepository {
       totalCredsRedeemed: users.reduce((s, u) => s + u.redeemedCreds, 0),
       totalAvailableCreds: users.reduce((s, u) => s + u.availableCreds, 0),
       totalPurchaseValue: users.reduce((s, u) => s + u.totalPurchaseValue, 0),
-      totalCouponsIssued: coupons.filter((c) => c.status !== "FAILED").length,
-      totalCouponsUsed: coupons.filter((c) => c.status === "USED").length,
+      totalCouponsIssued: coupons.filter((c: GridCouponRecord) => c.status !== "FAILED").length,
+      totalCouponsUsed: coupons.filter((c: GridCouponRecord) => c.status === "USED").length,
       totalSavingsRupees: coupons
-        .filter((c) => c.status === "USED")
+        .filter((c: GridCouponRecord) => c.status === "USED")
         .reduce((s, c) => s + c.valueRupees, 0),
       suspendedUsers: users.filter((u) => u.status !== "ACTIVE").length,
       usersOnFraudHold: users.filter((u) => !!u.fraudHold).length,
@@ -492,12 +492,12 @@ class MemoryGridRepository implements GridRepository {
   }
 
   async listCouponsByStatus(memberId: string, status: GridCouponStatus) {
-    return (this.coupons.get(memberId) ?? []).filter((c) => c.status === status);
+    return (this.coupons.get(memberId) ?? []).filter((c: GridCouponRecord) => c.status === status);
   }
 
   async saveCoupon(coupon: GridCouponRecord) {
     const list = this.coupons.get(coupon.memberId) ?? [];
-    if (!list.find((c) => c.code === coupon.code)) list.push({ ...coupon });
+    if (!list.find((c: GridCouponRecord) => c.code === coupon.code)) list.push({ ...coupon });
     this.coupons.set(coupon.memberId, list);
     return coupon;
   }
@@ -505,7 +505,7 @@ class MemoryGridRepository implements GridRepository {
   async markCouponUsed(code: string, orderId: string, usedAt: string) {
     for (const [, list] of this.coupons) {
       const idx = list.findIndex(
-        (c) => c.code === code && c.status !== "USED" && c.status !== "EXPIRED",
+        (c: GridCouponRecord) => c.code === code && c.status !== "USED" && c.status !== "EXPIRED",
       );
       if (idx !== -1) {
         list[idx] = { ...list[idx], status: "USED", usedAt, orderId };
@@ -518,7 +518,7 @@ class MemoryGridRepository implements GridRepository {
   async expireStaleCoupons(memberId: string, now: string) {
     const list = this.coupons.get(memberId) ?? [];
     let count  = 0;
-    const updated = list.map((c) => {
+    const updated = list.map((c: GridCouponRecord) => {
       if (c.status === "ACTIVE" && c.expiresAt && c.expiresAt < now) {
         count++;
         return { ...c, status: "EXPIRED" as GridCouponStatus };
@@ -533,12 +533,12 @@ class MemoryGridRepository implements GridRepository {
     const list = this.coupons.get(memberId) ?? [];
     return {
       total:   list.length,
-      active:  list.filter((c) => c.status === "ACTIVE").length,
-      used:    list.filter((c) => c.status === "USED").length,
-      expired: list.filter((c) => c.status === "EXPIRED").length,
-      failed:  list.filter((c) => c.status === "FAILED").length,
+      active:  list.filter((c: GridCouponRecord) => c.status === "ACTIVE").length,
+      used:    list.filter((c: GridCouponRecord) => c.status === "USED").length,
+      expired: list.filter((c: GridCouponRecord) => c.status === "EXPIRED").length,
+      failed:  list.filter((c: GridCouponRecord) => c.status === "FAILED").length,
       totalSavingsRupees: list
-        .filter((c) => c.status === "USED")
+        .filter((c: GridCouponRecord) => c.status === "USED")
         .reduce((s, c) => s + c.valueRupees, 0),
     };
   }
@@ -606,7 +606,7 @@ class MemoryGridRepository implements GridRepository {
 
   async getRedemptionByIdempotencyKey(memberId: string, idempotencyKey: string) {
     return [...this.redemptions.values()].find(
-      (r) => r.memberId === memberId && r.idempotencyKey === idempotencyKey,
+      (r: RedemptionRecord) => r.memberId === memberId && r.idempotencyKey === idempotencyKey,
     ) ?? null;
   }
 
@@ -633,8 +633,8 @@ class MemoryGridRepository implements GridRepository {
     skip?: number;
   }) {
     let rows = [...this.redemptions.values()];
-    if (opts?.memberId) rows = rows.filter((r) => r.memberId === opts.memberId);
-    if (opts?.status) rows = rows.filter((r) => r.status === opts.status);
+    if (opts?.memberId) rows = rows.filter((r: RedemptionRecord) => r.memberId === opts.memberId);
+    if (opts?.status) rows = rows.filter((r: RedemptionRecord) => r.status === opts.status);
     return rows
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(opts?.skip ?? 0, (opts?.skip ?? 0) + (opts?.limit ?? 50));
@@ -1115,15 +1115,39 @@ class MongoGridRepository implements GridRepository {
       ])
       .toArray() as Array<{ _id: string; count: number; totalValueRupees: number }>;
 
-    const by = Object.fromEntries(agg.map((r) => [r._id, r]));
-    return {
-      total:   agg.reduce((s, r) => s + r.count, 0),
-      active:  by["ACTIVE"]?.count   ?? 0,
-      used:    by["USED"]?.count     ?? 0,
-      expired: by["EXPIRED"]?.count  ?? 0,
-      failed:  by["FAILED"]?.count   ?? 0,
-      totalSavingsRupees: by["USED"]?.totalValueRupees ?? 0,
-    };
+    const by = Object.fromEntries(
+  agg.map(
+    (
+      r: {
+        _id: string;
+        count: number;
+        totalValueRupees: number;
+      }
+    ) => [r._id, r],
+  ),
+);
+
+return {
+  total: agg.reduce(
+    (
+      s: number,
+      r: {
+        _id: string;
+        count: number;
+        totalValueRupees: number;
+      },
+    ) => s + r.count,
+    0,
+  ),
+
+  active: by["ACTIVE"]?.count ?? 0,
+  used: by["USED"]?.count ?? 0,
+  expired: by["EXPIRED"]?.count ?? 0,
+  failed: by["FAILED"]?.count ?? 0,
+
+  totalSavingsRupees:
+    by["USED"]?.totalValueRupees ?? 0,
+};
   }
 
   async saveCreditTransaction(tx: CreditTransaction) {

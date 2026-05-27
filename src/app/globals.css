@@ -30,11 +30,29 @@
   --grid-glow-cyan: rgba(77, 247, 255, 0.35);
   --grid-glow-blue: rgba(59, 130, 246, 0.32);
   --grid-glow-violet: rgba(167, 139, 250, 0.3);
+  --grid-glow-magenta: rgba(232, 121, 249, 0.28);
 
   --grid-shadow-xl:
     0 10px 40px rgba(0, 0, 0, 0.45),
     0 0 0 1px rgba(255, 255, 255, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  --grid-panel-hover:
+    0 40px 120px rgba(0,0,0,0.72),
+    0 0 120px rgba(77,247,255,0.12),
+    0 0 180px rgba(167,139,250,0.08);
+
+  --grid-text-glow:
+    0 0 10px rgba(77,247,255,0.18),
+    0 0 20px rgba(77,247,255,0.10);
+
+  --grid-holo-gradient:
+    linear-gradient(
+      135deg,
+      rgba(77,247,255,0.08),
+      rgba(167,139,250,0.05),
+      rgba(232,121,249,0.06)
+    );
 
   --grid-noise-opacity: 0.03;
 }
@@ -115,6 +133,8 @@ body::after {
   pointer-events: none;
   z-index: -3;
 
+  opacity: 0.8;
+
   background:
     radial-gradient(circle at 20% 20%, rgba(77,247,255,0.12), transparent 25%),
     radial-gradient(circle at 80% 30%, rgba(167,139,250,0.10), transparent 30%),
@@ -123,6 +143,24 @@ body::after {
   filter: blur(120px);
 
   animation: ambientFloat 18s ease-in-out infinite alternate;
+}
+
+body .grid-atmosphere {
+  position: fixed;
+  inset: 0;
+
+  pointer-events: none;
+  z-index: -1;
+
+  background-image:
+    linear-gradient(rgba(77,247,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(77,247,255,0.04) 1px, transparent 1px);
+
+  background-size: 80px 80px;
+
+  mask-image: radial-gradient(circle at center, black, transparent 90%);
+
+  animation: atmospherePan 30s linear infinite;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -166,6 +204,8 @@ body::after {
 
   overflow: hidden;
 
+  isolation: isolate;
+
   border-radius: 32px;
 
   border: 1px solid rgba(255,255,255,0.08);
@@ -196,13 +236,11 @@ body::after {
 .panel-shell:hover {
   border-color: rgba(77,247,255,0.18);
 
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.06),
-    0 40px 120px rgba(0,0,0,0.65),
-    0 0 120px rgba(77,247,255,0.10),
-    inset 0 1px 0 rgba(255,255,255,0.10);
+  box-shadow: var(--grid-panel-hover);
 
-  transform: translateY(-2px);
+  transform:
+    translateY(-4px)
+    scale(1.002);
 }
 
 .panel-shell::before {
@@ -245,6 +283,29 @@ body::after {
   opacity: 0.5;
 }
 
+.panel-shell .edge-glow {
+  position: absolute;
+  inset: 0;
+
+  border-radius: inherit;
+
+  pointer-events: none;
+
+  border: 1px solid rgba(77,247,255,0.06);
+
+  box-shadow:
+    inset 0 0 20px rgba(77,247,255,0.04),
+    inset 0 0 40px rgba(167,139,250,0.03);
+
+  opacity: 0;
+
+  transition: opacity 0.35s ease;
+}
+
+.panel-shell:hover .edge-glow {
+  opacity: 1;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────────
    TYPOGRAPHY
 ────────────────────────────────────────────────────────────────────────────── */
@@ -259,6 +320,8 @@ body::after {
 
 .glitch-text {
   position: relative;
+
+  text-shadow: var(--grid-text-glow);
 }
 
 .glitch-text::before,
@@ -291,6 +354,14 @@ body::after {
   mix-blend-mode: screen;
 }
 
+.glitch-text:hover::before {
+  animation-duration: 1.5s;
+}
+
+.glitch-text:hover::after {
+  animation-duration: 1.5s;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────────
    DATA CHIP
 ────────────────────────────────────────────────────────────────────────────── */
@@ -314,6 +385,8 @@ body::after {
   position: relative;
 
   overflow: hidden;
+
+  isolation: isolate;
 
   border-radius: 999px;
 
@@ -352,10 +425,37 @@ body::after {
   box-shadow:
     0 0 30px rgba(77,247,255,0.18),
     0 12px 40px rgba(0,0,0,0.35);
+
+  filter: brightness(1.08);
 }
 
 .grid-button:active {
   transform: scale(0.98);
+}
+
+.grid-button::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  background:
+    linear-gradient(
+      120deg,
+      transparent,
+      rgba(255,255,255,0.16),
+      transparent
+    );
+
+  transform: translateX(-120%);
+
+  transition: transform 0.7s ease;
+
+  z-index: -1;
+}
+
+.grid-button:hover::before {
+  transform: translateX(120%);
 }
 
 .grid-button::after {
@@ -419,6 +519,9 @@ body::after {
 
   outline: none;
 
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.03);
+
   transition:
     border-color 0.25s ease,
     box-shadow 0.25s ease,
@@ -443,6 +546,8 @@ body::after {
       rgba(255,255,255,0.02)
     ),
     rgba(0,0,0,0.38);
+
+  transform: translateY(-1px);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -519,6 +624,52 @@ body::after {
 
 .floating-ui {
   animation: floatingUI 6s ease-in-out infinite;
+}
+
+.particle {
+  position: absolute;
+
+  width: 3px;
+  height: 3px;
+
+  border-radius: 999px;
+
+  background: rgba(77,247,255,0.7);
+
+  box-shadow:
+    0 0 10px rgba(77,247,255,0.6),
+    0 0 20px rgba(77,247,255,0.3);
+
+  animation:
+    particleFloat linear infinite;
+}
+
+.particle-sm {
+  width: 2px;
+  height: 2px;
+}
+
+.particle-lg {
+  width: 5px;
+  height: 5px;
+}
+
+.light-sweep {
+  position: absolute;
+  inset: -200%;
+
+  background:
+    linear-gradient(
+      120deg,
+      transparent 20%,
+      rgba(255,255,255,0.04) 40%,
+      transparent 60%
+    );
+
+  transform: rotate(12deg);
+
+  animation:
+    lightSweep 10s linear infinite;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
@@ -757,5 +908,65 @@ body::after {
 
   50% {
     transform: translateY(-6px);
+  }
+}
+
+@keyframes atmospherePan {
+  0% {
+    transform: translateY(0px);
+  }
+
+  100% {
+    transform: translateY(-80px);
+  }
+}
+
+@keyframes particleFloat {
+  0% {
+    transform:
+      translateY(0px)
+      translateX(0px);
+
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    transform:
+      translateY(-200px)
+      translateX(40px);
+
+    opacity: 0;
+  }
+}
+
+@keyframes lightSweep {
+  0% {
+    transform:
+      translateX(-40%)
+      rotate(12deg);
+  }
+
+  100% {
+    transform:
+      translateX(40%)
+      rotate(12deg);
+  }
+}
+
+@keyframes holoPulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+
+  50% {
+    opacity: 1;
   }
 }
