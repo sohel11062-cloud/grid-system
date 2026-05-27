@@ -5,11 +5,11 @@ import { MSG } from "@/server/brand";
 import { getEnv } from "@/server/env";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TYPES
+// DOMAIN TYPES
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface WixMember {
-  _id: string;
+  id: string;
   contactId?: string;
   loginEmail?: string;
 
@@ -55,7 +55,7 @@ export interface WixOrder {
     total?: {
       amount?: string | number;
       currency?: string;
-    } | string | number;
+    };
 
     totalPrice?: {
       amount?: string | number;
@@ -77,21 +77,6 @@ export interface WixOrder {
       original?: string;
     };
   }>;
-
-  appliedCoupon?: {
-    couponId?: string;
-    name?: string;
-    code?: string;
-
-    discount?: {
-      amount?: string | number;
-      currency?: string;
-    };
-  };
-}
-
-export interface WixCouponCreateResponse {
-  id: string;
 }
 
 export interface WixCoupon {
@@ -123,11 +108,24 @@ export interface WixCoupon {
 
     scope?: {
       namespace?: string;
+    };
+  };
+}
 
-      group?: {
-        name?: string;
-        entityId?: string;
-      };
+export interface WixCouponCreateResponse {
+  id?: string;
+
+  coupon?: {
+    id?: string;
+    code?: string;
+  };
+
+  data?: {
+    id?: string;
+
+    coupon?: {
+      id?: string;
+      code?: string;
     };
   };
 }
@@ -176,16 +174,26 @@ async function wixRequest<T>(
     "application/json",
   );
 
-  headers.set(
-    "Content-Type",
-    "application/json",
-  );
-
+  // IMPORTANT:
+  // DO NOT FORCE "Bearer "
+  // Your older Wix setup worked without it.
   headers.set(
     "Authorization",
-    `Bearer ${env.WIX_API_KEY}`,
+    env.WIX_API_KEY,
   );
 
+  headers.set(
+    "wix-site-id",
+    env.WIX_SITE_ID,
+  );
+
+  if (options.bodyJson) {
+
+    headers.set(
+      "Content-Type",
+      "application/json",
+    );
+  }
 
   let response: Response;
 
@@ -217,30 +225,23 @@ async function wixRequest<T>(
       error.name === "AbortError"
     ) {
 
-      console.error(
-        "[GRID_WIX_TIMEOUT]",
-        { url },
-      );
-
       throw new AppError(
-        MSG.INTERNAL_ERROR,
+        `Wix API timed out after ${WIX_TIMEOUT_MS}ms`,
         504,
         ErrorCode.WIX_API_TIMEOUT,
+        { url },
       );
     }
 
-    console.error(
-      "[GRID_WIX_NETWORK_ERROR]",
-      {
-        url,
-        error,
-      },
-    );
-
     throw new AppError(
-      MSG.INTERNAL_ERROR,
+      `Wix API network failure: ${
+        error instanceof Error
+          ? error.message
+          : String(error)
+      }`,
       503,
       ErrorCode.WIX_API_ERROR,
+      { url },
     );
 
   } finally {
@@ -251,51 +252,64 @@ async function wixRequest<T>(
   const text =
     await response.text().catch(() => "");
 
-  let data: unknown = {};
+  let json: unknown = {};
 
   try {
 
-    data =
+    json =
       text
         ? JSON.parse(text)
         : {};
 
   } catch {
 
-    console.error(
-      "[GRID_WIX_INVALID_JSON]",
-      text,
-    );
+    json = {
+      rawText: text,
+    };
   }
 
   if (!response.ok) {
 
-  console.error(
-    "[GRID_WIX_API_ERROR]",
-    {
-      url,
-      status: response.status,
-      response: data,
-    },
-  );
+    const bodyObj =
+      typeof json === "object" &&
+      json !== null
+        ? json as Record<string, unknown>
+        : {};
 
-  console.error(
-    "[GRID_WIX_FULL_RESPONSE]",
-    JSON.stringify(data, null, 2),
-  );
+    const message =
+      typeof bodyObj.message === "string"
+        ? bodyObj.message
+        : typeof bodyObj.error === "string"
+          ? bodyObj.error
+          : `Wix API error — HTTP ${response.status}`;
+
+    console.error(
+      "[GRID_WIX_API_ERROR]",
+      {
+        url,
+        status: response.status,
+        errorCode:
+          bodyObj.errorCode ??
+          bodyObj.code ??
+          null,
+        message,
+      },
+    );
 
     throw new AppError(
-      MSG.INTERNAL_ERROR,
+      message,
       response.status,
       ErrorCode.WIX_API_ERROR,
       {
         status: response.status,
-        response: data,
+        errorCode:
+          bodyObj.errorCode ??
+          bodyObj.code,
       },
     );
   }
 
-  return data as T;
+  return json as T;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -340,7 +354,7 @@ async function withRetry<T>(
         600 * (attempt + 1);
 
       console.warn(
-        `[GRID_WIX] ${label} retry ${attempt + 1} in ${delay}ms`,
+        `[GRID_WIX_RETRY] ${label} retry ${attempt + 1} in ${delay}ms`,
       );
 
       await new Promise<void>((resolve) =>
@@ -353,22 +367,34 @@ async function withRetry<T>(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DUPLICATE CODE DETECTION
+// DUPLICATE COUPON DETECTION
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function isDuplicateCodeError(
   error: unknown,
 ): boolean {
 
-  const message =
-    error instanceof Error
-      ? error.message
-      : String(error);
+  if (!(error instanceof AppError)) {
+    return false;
+  }
+
+  if (
+    error.status !== 400 &&
+    error.status !== 409
+  ) {
+    return false;
+  }
+
+  const details =
+    JSON.stringify(
+      error.details ?? "",
+    ).toLowerCase();
 
   return (
-    message.includes("already exists") ||
-    message.includes("duplicate") ||
-    message.includes("409")
+    details.includes("duplicate") ||
+    details.includes("already exist") ||
+    details.includes("unique") ||
+    details.includes("code")
   );
 }
 
@@ -384,8 +410,9 @@ export async function getMemberById(
     "getMemberById",
     async () => {
 
-      const { WIX_MEMBERS_ENDPOINT } =
-        getEnv();
+      const {
+        WIX_MEMBERS_ENDPOINT,
+      } = getEnv();
 
       const response =
         await wixRequest<{
@@ -419,9 +446,9 @@ export async function queryAllMembers(): Promise<WixMember[]> {
 
   const all: WixMember[] = [];
 
-  let offset = 0;
-
   const LIMIT = 100;
+
+  let offset = 0;
 
   for (;;) {
 
@@ -520,6 +547,7 @@ export async function searchOrdersByIdentity(
   const conditions: JsonBody[] = [];
 
   if (identity.memberId) {
+
     conditions.push({
       "buyerInfo.memberId": {
         $eq: identity.memberId,
@@ -528,6 +556,7 @@ export async function searchOrdersByIdentity(
   }
 
   if (identity.contactId) {
+
     conditions.push({
       "buyerInfo.contactId": {
         $eq: identity.contactId,
@@ -536,6 +565,7 @@ export async function searchOrdersByIdentity(
   }
 
   if (identity.email) {
+
     conditions.push({
       "buyerInfo.email": {
         $eq: identity.email,
@@ -590,31 +620,55 @@ export async function searchOrdersByIdentity(
 // CREATE COUPON
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function createMoneyOffCoupon({
-  code,
-  amount,
-}: {
+export async function createMoneyOffCoupon(input: {
   code: string;
   amount: number;
-}): Promise<WixCouponCreateResponse> {
+}): Promise<{ id: string }> {
 
-  if (!Number.isFinite(amount) || amount <= 0) {
+  const env = getEnv();
+
+  const numericAmount =
+    Number(input.amount);
+
+  if (
+    !Number.isFinite(numericAmount) ||
+    numericAmount <= 0 ||
+    !Number.isInteger(numericAmount)
+  ) {
 
     throw new AppError(
-      "Invalid coupon amount.",
+      `Invalid coupon amount: ${input.amount}`,
       400,
       ErrorCode.VALIDATION_ERROR,
     );
   }
 
-  const expirationTime =
-    Date.now() +
+  const code =
+    input.code.trim();
+
+  if (!code || code.length < 4) {
+
+    throw new AppError(
+      "Invalid coupon code.",
+      400,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
+  const nowMs =
+    Date.now();
+
+  const expiryMs =
+    nowMs +
     365 * 24 * 60 * 60 * 1000;
 
-  const payload = {
+  // IMPORTANT:
+  // This exact structure worked before.
+  const payload: JsonBody = {
     specification: {
 
-      name: `GRID-${code}`,
+      name:
+        `THE GRID — ₹${numericAmount} REWARD`,
 
       code,
 
@@ -622,32 +676,41 @@ export async function createMoneyOffCoupon({
 
       usageLimit: 1,
 
-      limitedToOneItem: false,
+      type: "MoneyOff",
 
       startTime:
-        Date.now().toString(),
+        String(nowMs),
 
       expirationTime:
-        expirationTime.toString(),
+        String(expiryMs),
 
       scope: {
-  namespace: "wix-stores",
-},
+        namespace:
+          env.GRID_COUPON_SCOPE_NAMESPACE ||
+          "stores",
+      },
 
-      // IMPORTANT:
-      // MUST BE NUMBER
-      moneyOffAmount: amount,
+      moneyOffAmount:
+        numericAmount,
     },
   };
 
-  console.log(
-    "[GRID_WIX_COUPON_PAYLOAD]",
-    JSON.stringify(payload, null, 2),
+  console.info(
+    "[GRID_COUPON_REQUEST]",
+    {
+      endpoint:
+        env.WIX_COUPONS_ENDPOINT,
+
+      code,
+
+      amount:
+        numericAmount,
+    },
   );
 
   const response =
     await wixRequest<WixCouponCreateResponse>(
-      "https://www.wixapis.com/stores/v2/coupons",
+      env.WIX_COUPONS_ENDPOINT,
       {
         method: "POST",
 
@@ -656,26 +719,31 @@ export async function createMoneyOffCoupon({
       },
     );
 
-  console.log(
-    "[GRID_WIX_COUPON_SUCCESS]",
+  console.info(
+    "[GRID_COUPON_RESPONSE]",
     response,
   );
 
-  if (!response?.id) {
+  // IMPORTANT:
+  // Flexible response parsing
+  const couponId =
+    response?.id ||
+    response?.coupon?.id ||
+    response?.data?.id ||
+    response?.data?.coupon?.id;
 
-    console.error(
-      "[GRID_WIX_INVALID_COUPON_RESPONSE]",
-      response,
-    );
+  if (!couponId) {
 
     throw new AppError(
-      "Coupon created but Wix returned no coupon ID.",
-      502,
+      "Wix coupon API returned success but no coupon ID.",
+      500,
       ErrorCode.COUPON_CREATE_FAILED,
     );
   }
 
-  return response;
+  return {
+    id: couponId,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -710,43 +778,6 @@ export async function getCoupon(
       }
 
       return response.coupon;
-    },
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// QUERY COUPONS
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function queryCouponsByCode(
-  code: string,
-): Promise<WixCoupon[]> {
-
-  return withRetry(
-    "queryCouponsByCode",
-    async () => {
-
-      const response =
-        await wixRequest<{
-          coupons?: WixCoupon[];
-        }>(
-          "https://www.wixapis.com/stores/v2/coupons/query",
-          {
-            method: "POST",
-
-            bodyJson: {
-              query: {
-                filter: {
-  "specification.code": {
-    $eq: code,
-  },
-},
-              },
-            },
-          },
-        );
-
-      return response.coupons ?? [];
     },
   );
 }

@@ -139,7 +139,7 @@ export async function redeemMemberCreds(
 
     const coupon =
       coupons.find(
-        (c) =>
+        (c: GridCouponRecord) =>
           c.code ===
           existingRedemption.couponCode,
       );
@@ -297,8 +297,8 @@ export async function redeemMemberCreds(
       );
 
       wixCouponId =
-  response?.id ??
-  undefined;
+        response?.id ??
+        undefined;
 
       if (!wixCouponId) {
 
@@ -318,18 +318,18 @@ export async function redeemMemberCreds(
         error;
 
       console.error(
-  "[GRID_WIX_COUPON_CREATE_ERROR]",
-  {
-    attempt,
+        "[GRID_WIX_COUPON_CREATE_ERROR]",
+        {
+          attempt,
 
-    message:
-      error instanceof Error
-        ? error.message
-        : String(error),
+          message:
+            error instanceof Error
+              ? error.message
+              : String(error),
 
-    error,
-  },
-);
+          error,
+        },
+      );
 
       // DUPLICATE CODE RETRY
       if (
@@ -495,28 +495,28 @@ export async function redeemMemberCreds(
 
     try {
 
-  if (wixCouponId) {
+      if (wixCouponId) {
 
-    await deleteCoupon(
-      wixCouponId,
-    );
+        await deleteCoupon(
+          wixCouponId,
+        );
 
-    console.log(
-      "[GRID_WIX_COUPON_ROLLBACK_SUCCESS]",
-      {
-        memberId,
-        wixCouponId,
-      },
-    );
-  }
+        console.log(
+          "[GRID_WIX_COUPON_ROLLBACK_SUCCESS]",
+          {
+            memberId,
+            wixCouponId,
+          },
+        );
+      }
 
-} catch (rollbackError) {
+    } catch (rollbackError) {
 
-  console.error(
-    "[GRID_WIX_COUPON_ROLLBACK_FAILED]",
-    rollbackError,
-  );
-}
+      console.error(
+        "[GRID_WIX_COUPON_ROLLBACK_FAILED]",
+        rollbackError,
+      );
+    }
 
     await repo.updateRedemption(
       redemption.id,
