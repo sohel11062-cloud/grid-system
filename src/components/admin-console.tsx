@@ -1143,10 +1143,21 @@ const [campaignType, setCampaignType] =
     </div>
 
     <button
-      className="grid-button mt-5"
-    >
-      Update Economy
-    </button>
+  className="grid-button mt-5 w-full"
+  onClick={() =>
+    mutate(
+      "/api/admin/economy",
+      {
+        conversionRate:
+          Number(
+            conversionRate,
+          ),
+      },
+    )
+  }
+>
+  Update Economy
+</button>
 
   </section>
 
