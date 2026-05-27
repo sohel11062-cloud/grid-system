@@ -24,6 +24,8 @@ import {
   formatIndianCurrency,
 } from "@/lib/grid";
 
+import { AnimatedCounter } from "@/components/animated-counter";
+
 const HologramScene = dynamic(
   () =>
     import("@/components/hologram-scene").then(
@@ -147,19 +149,47 @@ function StatTile({
   value,
 }: {
   label: string;
-  value: string;
+  value: number;
 }) {
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+    <div
+      className="
+        relative
+        overflow-hidden
+        rounded-3xl
+        border border-white/10
+        bg-black/30
+        p-5
+        backdrop-blur-2xl
+        transition-all
+        duration-500
+        hover:border-cyan-400/30
+        hover:shadow-[0_0_40px_rgba(77,247,255,0.08)]
+      "
+    >
 
-      <p className="panel-title">
-        {label}
-      </p>
+      <div className="absolute inset-0 opacity-[0.05]">
 
-      <p className="mt-3 text-2xl font-semibold text-white">
-        {value}
-      </p>
+        <div className="absolute left-0 top-0 h-[180px] w-[180px] rounded-full bg-cyan-400 blur-[100px]" />
+
+      </div>
+
+      <div className="relative z-10">
+
+        <p className="panel-title">
+          {label}
+        </p>
+
+        <p className="mt-3 text-3xl font-semibold text-white">
+
+          <AnimatedCounter
+            value={value}
+          />
+
+        </p>
+
+      </div>
 
     </div>
   );
@@ -170,10 +200,6 @@ function StatTile({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AdminConsole() {
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // STATE
-  // ───────────────────────────────────────────────────────────────────────────
 
   const [data, setData] =
     useState<OverviewPayload | null>(
@@ -474,13 +500,44 @@ export function AdminConsole() {
 
       <HologramScene />
 
+      {/* CYBER GRID ATMOSPHERE */}
+
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+
+        <div className="absolute inset-0 bg-[#04050a]" />
+
+        <div className="absolute left-[-10%] top-[5%] h-[600px] w-[600px] rounded-full bg-cyan-400/10 blur-[180px] animate-nebulaFloat" />
+
+        <div className="absolute right-[-10%] top-[20%] h-[520px] w-[520px] rounded-full bg-violet-500/10 blur-[180px] animate-nebulaFloatSlow" />
+
+        <div className="absolute bottom-[-10%] left-[30%] h-[520px] w-[520px] rounded-full bg-fuchsia-500/10 blur-[200px] animate-nebulaFloat" />
+
+        <div
+          className="absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage: `
+              linear-gradient(rgba(77,247,255,0.10) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(77,247,255,0.10) 1px, transparent 1px)
+            `,
+            backgroundSize: "80px 80px",
+          }}
+        />
+
+      </div>
+
       <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6">
 
         {/* HEADER */}
 
-        <header className="panel-shell flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <header className="panel-shell relative overflow-hidden flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
-          <div>
+          <div className="absolute inset-0 opacity-[0.06]">
+
+            <div className="absolute inset-y-0 left-0 w-[40%] bg-gradient-to-r from-cyan-400/20 to-transparent blur-3xl" />
+
+          </div>
+
+          <div className="relative z-10">
 
             <p className="panel-title">
               THE GRID — OWNER CONSOLE
@@ -491,20 +548,40 @@ export function AdminConsole() {
             </h1>
 
             {data && (
-              <p className="mt-2 text-xs text-grid-muted">
+              <>
 
-                {data.admin.email}
+                <p className="mt-2 text-xs text-grid-muted">
 
-                {" · "}
+                  {data.admin.email}
 
-                {data.admin.roles.join(", ")}
+                  {" · "}
 
-              </p>
+                  {data.admin.roles.join(", ")}
+
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+
+                  <span className="data-chip">
+                    GRID CORE ONLINE
+                  </span>
+
+                  <span className="data-chip">
+                    LIVE LEDGER
+                  </span>
+
+                  <span className="data-chip">
+                    FRAUD ENGINE ACTIVE
+                  </span>
+
+                </div>
+
+              </>
             )}
 
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="relative z-10 flex flex-wrap gap-2">
 
             <a
               href="/"
@@ -523,8 +600,6 @@ export function AdminConsole() {
           </div>
 
         </header>
-
-        {/* ALERTS */}
 
         {(error || message) && (
 
@@ -550,28 +625,22 @@ export function AdminConsole() {
 
               <StatTile
                 label="ACTIVE USERS"
-                value={data.globalStats.activeUsers.toLocaleString("en-IN")}
+                value={data.globalStats.activeUsers}
               />
 
               <StatTile
                 label="CRED ISSUED"
-                value={formatCompactNumber(
-                  data.globalStats.totalCredsIssued,
-                )}
+                value={data.globalStats.totalCredsIssued}
               />
 
               <StatTile
                 label="REDEEMED"
-                value={formatCompactNumber(
-                  data.globalStats.totalCredsRedeemed,
-                )}
+                value={data.globalStats.totalCredsRedeemed}
               />
 
               <StatTile
-                label="SAVINGS"
-                value={formatIndianCurrency(
-                  data.globalStats.totalSavingsRupees,
-                )}
+                label="TOTAL SAVINGS"
+                value={data.globalStats.totalSavingsRupees}
               />
 
             </section>
@@ -579,6 +648,8 @@ export function AdminConsole() {
             {/* USER REGISTRY */}
 
             <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+
+              {/* USERS */}
 
               <div className="panel-shell overflow-hidden">
 
@@ -601,8 +672,6 @@ export function AdminConsole() {
                   </span>
 
                 </div>
-
-                {/* SEARCH */}
 
                 <div className="mt-5 flex flex-col gap-3 md:flex-row">
 
@@ -658,7 +727,17 @@ export function AdminConsole() {
 
                 {/* TABLE */}
 
-                <div className="mt-5 overflow-x-auto">
+                <div
+                  className="
+                    mt-5
+                    overflow-x-auto
+                    rounded-3xl
+                    border
+                    border-white/10
+                    bg-black/20
+                    backdrop-blur-xl
+                  "
+                >
 
                   <table className="w-full min-w-[760px] text-left text-xs">
 
@@ -666,7 +745,7 @@ export function AdminConsole() {
 
                       <tr>
 
-                        <th className="pb-3">
+                        <th className="pb-3 px-4 pt-4">
                           User
                         </th>
 
@@ -697,7 +776,7 @@ export function AdminConsole() {
 
                           <tr
                             key={user.memberId}
-                            className={`cursor-pointer transition-colors hover:bg-white/5 ${
+                            className={`cursor-pointer transition-all duration-300 hover:bg-cyan-400/5 hover:shadow-[inset_0_0_20px_rgba(77,247,255,0.06)] ${
                               memberId ===
                               user.memberId
                                 ? "bg-grid-cyan/8"
@@ -710,7 +789,7 @@ export function AdminConsole() {
                             }
                           >
 
-                            <td className="py-3">
+                            <td className="py-4 px-4">
 
                               <p className="font-semibold text-white">
                                 {user.username}
@@ -722,7 +801,7 @@ export function AdminConsole() {
 
                             </td>
 
-                            <td className="py-3 text-white">
+                            <td className="py-4 text-white">
 
                               {user.availableCreds.toLocaleString(
                                 "en-IN",
@@ -731,29 +810,32 @@ export function AdminConsole() {
 
                             </td>
 
-                            <td className="py-3 text-grid-cyan">
+                            <td className="py-4 text-grid-cyan">
 
                               {user.rankOverride ??
                                 user.level}
 
                             </td>
 
-                            <td className="py-3 text-grid-muted">
+                            <td className="py-4 text-grid-muted">
 
                               {user.status}
 
                             </td>
 
-                            <td
-                              className={`py-3 ${
-                                user.fraudHold
-                                  ? "text-red-300"
-                                  : "text-grid-muted"
-                              }`}
-                            >
+                            <td className="py-4">
 
-                              {user.fraudScore ??
-                                0}
+                              <span
+                                className={
+                                  (user.fraudScore ?? 0) > 70
+                                    ? "text-red-300"
+                                    : (user.fraudScore ?? 0) > 40
+                                    ? "text-amber-300"
+                                    : "text-emerald-300"
+                                }
+                              >
+                                {user.fraudScore ?? 0}
+                              </span>
 
                             </td>
 
@@ -771,103 +853,182 @@ export function AdminConsole() {
 
               {/* OPERATOR PANEL */}
 
-              <div className="panel-shell">
+              <div className="panel-shell relative overflow-hidden">
 
-                <p className="panel-title">
-                  OPERATOR ACTIONS
-                </p>
+                <div className="absolute inset-0 opacity-[0.05]">
 
-                <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
-                  Controls
-                </h2>
+                  <div className="absolute right-0 top-0 h-[220px] w-[220px] rounded-full bg-violet-500 blur-[120px]" />
 
-                <div className="mt-5 space-y-4">
+                </div>
 
-                  <label className="block">
+                <div className="relative z-10">
 
-                    <span className="mb-2 block text-[10px] uppercase tracking-[0.28em] text-grid-muted">
-                      Member ID
-                    </span>
+                  <p className="panel-title">
+                    OPERATOR ACTIONS
+                  </p>
 
-                    <input
-                      className="grid-input"
-                      value={memberId}
-                      onChange={(e) =>
-                        setMemberId(
-                          e.target.value,
-                        )
-                      }
-                    />
+                  <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
+                    Controls
+                  </h2>
 
-                  </label>
+                  <div className="mt-5 space-y-4">
 
-                  {selectedUser && (
+                    <label className="block">
 
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-xs text-grid-muted">
+                      <span className="mb-2 block text-[10px] uppercase tracking-[0.28em] text-grid-muted">
+                        Member ID
+                      </span>
 
-                      <p className="font-semibold text-white">
-                        {selectedUser.username}
-                      </p>
+                      <input
+                        className="grid-input"
+                        value={memberId}
+                        onChange={(e) =>
+                          setMemberId(
+                            e.target.value,
+                          )
+                        }
+                      />
 
-                      <p>
+                    </label>
 
-                        {selectedUser.availableCreds.toLocaleString(
-                          "en-IN",
-                        )}{" "}
-                        C ·{" "}
-                        {selectedUser.status}
+                    {selectedUser && (
 
-                      </p>
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-xs text-grid-muted">
+
+                        <p className="font-semibold text-white">
+                          {selectedUser.username}
+                        </p>
+
+                        <p>
+
+                          {selectedUser.availableCreds.toLocaleString(
+                            "en-IN",
+                          )}{" "}
+                          C ·{" "}
+                          {selectedUser.status}
+
+                        </p>
+
+                      </div>
+                    )}
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+
+                      <input
+                        className="grid-input"
+                        value={amount}
+                        onChange={(e) =>
+                          setAmount(
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Cred amount"
+                      />
+
+                      <input
+                        className="grid-input"
+                        value={reason}
+                        onChange={(e) =>
+                          setReason(
+                            e.target.value,
+                          )
+                        }
+                        placeholder="Reason"
+                      />
 
                     </div>
-                  )}
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      className="grid-button w-full"
+                      onClick={() =>
+                        mutate(
+                          `/api/admin/users/${memberId}/adjust`,
+                          {
+                            amount:
+                              Number(amount),
 
-                    <input
-                      className="grid-input"
-                      value={amount}
-                      onChange={(e) =>
-                        setAmount(
-                          e.target.value,
+                            reason,
+                          },
                         )
                       }
-                      placeholder="Cred amount"
-                    />
+                    >
 
-                    <input
-                      className="grid-input"
-                      value={reason}
-                      onChange={(e) =>
-                        setReason(
-                          e.target.value,
-                        )
-                      }
-                      placeholder="Reason"
-                    />
+                      Adjust Creds
+
+                    </button>
 
                   </div>
 
-                  <button
-                    className="grid-button w-full"
-                    onClick={() =>
-                      mutate(
-                        `/api/admin/users/${memberId}/adjust`,
-                        {
-                          amount:
-                            Number(amount),
+                </div>
 
-                          reason,
-                        },
-                      )
-                    }
-                  >
+              </div>
 
-                    Adjust Creds
+            </section>
 
-                  </button>
+            {/* LIVE SYSTEM FEED */}
+
+            <section className="panel-shell">
+
+              <div className="flex items-center justify-between">
+
+                <div>
+
+                  <p className="panel-title">
+                    LIVE SYSTEM FEED
+                  </p>
+
+                  <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
+                    Runtime Activity
+                  </h2>
 
                 </div>
+
+                <span className="data-chip">
+                  LIVE
+                </span>
+
+              </div>
+
+              <div className="mt-6 space-y-3">
+
+                {data.auditLogs
+                  .slice(0, 8)
+                  .map((log) => (
+
+                    <div
+                      key={log.id}
+                      className="
+                        flex
+                        items-center
+                        justify-between
+                        rounded-2xl
+                        border
+                        border-white/10
+                        bg-black/20
+                        px-4
+                        py-3
+                      "
+                    >
+
+                      <div>
+
+                        <p className="text-sm text-white">
+                          {log.action}
+                        </p>
+
+                        <p className="mt-1 text-[11px] text-grid-muted">
+                          {log.message}
+                        </p>
+
+                      </div>
+
+                      <span className="text-[10px] uppercase tracking-[0.24em] text-grid-cyan">
+                        {log.severity}
+                      </span>
+
+                    </div>
+
+                  ))}
 
               </div>
 

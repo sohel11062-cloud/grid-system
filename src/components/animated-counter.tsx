@@ -1,45 +1,309 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 interface Props {
-  value:      number;
-  duration?:  number;
-  formatter?: (v: number) => string;
+  value: number;
+
+  duration?: number;
+
+  formatter?: (
+    v: number,
+  ) => string;
+
+  decimals?: number;
+
+  glow?: boolean;
+
+  pulse?: boolean;
+
+  prefix?: string;
+
+  suffix?: string;
 }
 
-export function AnimatedCounter({ value, duration = 1100, formatter }: Props) {
-  const [display, setDisplay] = useState(value);
-  const prevRef    = useRef(value);
-  const rafRef     = useRef<number | null>(null);
-  const startTsRef = useRef<number | null>(null);
+function easeOutExpo(
+  x: number,
+) {
+
+  return x === 1
+    ? 1
+    : 1 -
+        Math.pow(
+          2,
+          -10 * x,
+        );
+}
+
+export function AnimatedCounter({
+  value,
+
+  duration = 1400,
+
+  formatter,
+
+  decimals = 0,
+
+  glow = true,
+
+  pulse = true,
+
+  prefix = "",
+
+  suffix = "",
+}: Props) {
+
+  const [
+    display,
+    setDisplay,
+  ] = useState(value);
+
+  const [
+    isAnimating,
+    setIsAnimating,
+  ] = useState(false);
+
+  const prevRef =
+    useRef(value);
+
+  const rafRef =
+    useRef<number | null>(
+      null,
+    );
+
+  const startTsRef =
+    useRef<number | null>(
+      null,
+    );
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // ANIMATION
+  // ───────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const from = prevRef.current;
-    const to   = value;
-    if (from === to) return;
 
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    startTsRef.current = null;
+    const from =
+      prevRef.current;
 
-    const step = (ts: number) => {
-      if (!startTsRef.current) startTsRef.current = ts;
-      const elapsed  = ts - startTsRef.current;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased    = 1 - Math.pow(1 - progress, 3); // cubic ease-out
-      setDisplay(Math.round(from + (to - from) * eased));
-      if (progress < 1) {
-        rafRef.current = requestAnimationFrame(step);
+    const to = value;
+
+    if (
+      from === to
+    ) {
+      return;
+    }
+
+    setIsAnimating(
+      true,
+    );
+
+    if (
+      rafRef.current
+    ) {
+
+      cancelAnimationFrame(
+        rafRef.current,
+      );
+    }
+
+    startTsRef.current =
+      null;
+
+    const step = (
+      ts: number,
+    ) => {
+
+      if (
+        !startTsRef.current
+      ) {
+
+        startTsRef.current =
+          ts;
+      }
+
+      const elapsed =
+        ts -
+        startTsRef.current;
+
+      const progress =
+        Math.min(
+          elapsed /
+            duration,
+          1,
+        );
+
+      const eased =
+        easeOutExpo(
+          progress,
+        );
+
+      const current =
+        from +
+        (to - from) *
+          eased;
+
+      const rounded =
+        Number(
+          current.toFixed(
+            decimals,
+          ),
+        );
+
+      setDisplay(
+        rounded,
+      );
+
+      if (
+        progress < 1
+      ) {
+
+        rafRef.current =
+          requestAnimationFrame(
+            step,
+          );
+
       } else {
-        prevRef.current = to;
+
+        setDisplay(to);
+
+        prevRef.current =
+          to;
+
+        setIsAnimating(
+          false,
+        );
       }
     };
 
-    rafRef.current = requestAnimationFrame(step);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [value, duration]);
+    rafRef.current =
+      requestAnimationFrame(
+        step,
+      );
 
-  return <>{formatter ? formatter(display) : display.toLocaleString("en-IN")}</>;
+    return () => {
+
+      if (
+        rafRef.current
+      ) {
+
+        cancelAnimationFrame(
+          rafRef.current,
+        );
+      }
+    };
+
+  }, [
+    value,
+    duration,
+    decimals,
+  ]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // FORMAT
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const formatted =
+    formatter
+      ? formatter(
+          display,
+        )
+      : display.toLocaleString(
+          "en-IN",
+          {
+            minimumFractionDigits:
+              decimals,
+            maximumFractionDigits:
+              decimals,
+          },
+        );
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ───────────────────────────────────────────────────────────────────────────
+
+  return (
+
+    <span
+      className={`
+        relative
+        inline-flex
+        items-center
+        transition-all
+        duration-500
+        ${
+          glow
+            ? "text-shadow-cyan"
+            : ""
+        }
+        ${
+          pulse &&
+          isAnimating
+            ? "animate-counterPulse"
+            : ""
+        }
+      `}
+    >
+
+      {/* GLOW LAYER */}
+
+      {glow && (
+
+        <span
+          className="
+            pointer-events-none
+            absolute
+            inset-0
+            blur-xl
+            opacity-40
+          "
+          aria-hidden
+        >
+          {prefix}
+          {formatted}
+          {suffix}
+        </span>
+      )}
+
+      {/* MAIN VALUE */}
+
+      <span
+        className="
+          relative
+          z-10
+          font-semibold
+          tracking-tight
+        "
+      >
+
+        {prefix}
+
+        {formatted}
+
+        {suffix}
+
+      </span>
+
+      {/* LIVE PULSE DOT */}
+
+      {isAnimating && (
+
+        <span
+          className="
+            ml-2
+            inline-block
+            h-2
+            w-2
+            rounded-full
+            bg-grid-cyan
+            animate-ping
+          "
+        />
+      )}
+
+    </span>
+  );
 }

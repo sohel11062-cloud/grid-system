@@ -4,377 +4,775 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 export function HologramScene() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>(0);
+
+  const canvasRef =
+    useRef<HTMLCanvasElement>(null);
+
+  const rafRef =
+    useRef<number>(0);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (window.innerWidth < 768) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (
+      typeof window ===
+      "undefined"
+    ) {
+      return;
+    }
 
-    const renderer = new THREE.WebGLRenderer({
-      canvas,
-      alpha: true,
-      antialias: true,
-      powerPreference: "high-performance",
-    });
+    // PERFORMANCE SAFE GUARDS
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    if (
+      window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches
+    ) {
+      return;
+    }
 
-    const scene = new THREE.Scene();
+    // DISABLE ON SMALL DEVICES
 
-    scene.fog = new THREE.FogExp2(0x04050a, 0.035);
+    if (
+      window.innerWidth < 768
+    ) {
+      return;
+    }
 
-    const camera = new THREE.PerspectiveCamera(
-      55,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000,
+    const canvas =
+      canvasRef.current;
+
+    if (!canvas) {
+      return;
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // RENDERER
+    // ───────────────────────────────────────────────────────────────────────
+
+    const renderer =
+      new THREE.WebGLRenderer({
+        canvas,
+        alpha: true,
+        antialias: true,
+        powerPreference:
+          "high-performance",
+      });
+
+    renderer.setPixelRatio(
+      Math.min(
+        window.devicePixelRatio,
+        1.5,
+      ),
     );
 
-    camera.position.set(0, 1.5, 10);
+    renderer.setSize(
+      window.innerWidth,
+      window.innerHeight,
+    );
 
-    // ─────────────────────────────────────────────────────────────────────────
+    renderer.outputColorSpace =
+      THREE.SRGBColorSpace;
+
+    renderer.toneMapping =
+      THREE.ACESFilmicToneMapping;
+
+    renderer.toneMappingExposure =
+      1.1;
+
+    // ───────────────────────────────────────────────────────────────────────
+    // SCENE
+    // ───────────────────────────────────────────────────────────────────────
+
+    const scene =
+      new THREE.Scene();
+
+    scene.fog =
+      new THREE.FogExp2(
+        0x02030a,
+        0.028,
+      );
+
+    // ───────────────────────────────────────────────────────────────────────
+    // CAMERA
+    // ───────────────────────────────────────────────────────────────────────
+
+    const camera =
+      new THREE.PerspectiveCamera(
+        55,
+        window.innerWidth /
+          window.innerHeight,
+        0.1,
+        1000,
+      );
+
+    camera.position.set(
+      0,
+      1.5,
+      11,
+    );
+
+    // ───────────────────────────────────────────────────────────────────────
     // LIGHTING
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
 
-    const cyanLight = new THREE.PointLight(0x4df7ff, 2.4, 40);
-    cyanLight.position.set(0, 0, 0);
+    const cyanLight =
+      new THREE.PointLight(
+        0x4df7ff,
+        3,
+        45,
+      );
 
-    const purpleLight = new THREE.PointLight(0xa78bfa, 2, 35);
-    purpleLight.position.set(5, 2, 4);
+    cyanLight.position.set(
+      0,
+      0,
+      0,
+    );
 
-    const magentaLight = new THREE.PointLight(0xe879f9, 1.5, 30);
-    magentaLight.position.set(-5, -2, 4);
+    const violetLight =
+      new THREE.PointLight(
+        0xa78bfa,
+        2.4,
+        40,
+      );
 
-    scene.add(cyanLight);
-    scene.add(purpleLight);
-    scene.add(magentaLight);
+    violetLight.position.set(
+      6,
+      3,
+      5,
+    );
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // STARS
-    // ─────────────────────────────────────────────────────────────────────────
+    const magentaLight =
+      new THREE.PointLight(
+        0xe879f9,
+        2,
+        35,
+      );
 
-    const starGeo = new THREE.BufferGeometry();
+    magentaLight.position.set(
+      -6,
+      -2,
+      5,
+    );
 
-    const starCount = 6000;
+    scene.add(
+      cyanLight,
+    );
 
-    const starPos = new Float32Array(starCount * 3);
+    scene.add(
+      violetLight,
+    );
 
-    for (let i = 0; i < starPos.length; i++) {
-      starPos[i] = (Math.random() - 0.5) * 500;
+    scene.add(
+      magentaLight,
+    );
+
+    // ───────────────────────────────────────────────────────────────────────
+    // STARFIELD
+    // ───────────────────────────────────────────────────────────────────────
+
+    const starGeo =
+      new THREE.BufferGeometry();
+
+    const starCount = 9000;
+
+    const starPos =
+      new Float32Array(
+        starCount * 3,
+      );
+
+    for (
+      let i = 0;
+      i < starPos.length;
+      i++
+    ) {
+
+      starPos[i] =
+        (Math.random() - 0.5) *
+        600;
     }
 
     starGeo.setAttribute(
       "position",
-      new THREE.BufferAttribute(starPos, 3),
+      new THREE.BufferAttribute(
+        starPos,
+        3,
+      ),
     );
 
-    const stars = new THREE.Points(
-      starGeo,
-      new THREE.PointsMaterial({
-        color: 0x4df7ff,
-        size: 0.12,
-        transparent: true,
-        opacity: 0.5,
-      }),
-    );
+    const stars =
+      new THREE.Points(
+        starGeo,
+        new THREE.PointsMaterial({
+          color: 0x8cfbff,
+          size: 0.12,
+          transparent: true,
+          opacity: 0.5,
+        }),
+      );
 
     scene.add(stars);
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // MAIN CORE
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
+    // CORE GROUP
+    // ───────────────────────────────────────────────────────────────────────
 
-    const coreGroup = new THREE.Group();
+    const coreGroup =
+      new THREE.Group();
 
-    const core = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.6, 1),
-      new THREE.MeshBasicMaterial({
-        color: 0x4df7ff,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.35,
-      }),
-    );
+    // MAIN WIREFRAME CORE
+
+    const core =
+      new THREE.Mesh(
+        new THREE.IcosahedronGeometry(
+          1.7,
+          1,
+        ),
+        new THREE.MeshBasicMaterial({
+          color: 0x4df7ff,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.35,
+        }),
+      );
 
     coreGroup.add(core);
 
-    // INNER GLOW
+    // INNER ENERGY SPHERE
 
-    const innerGlow = new THREE.Mesh(
-      new THREE.SphereGeometry(0.95, 32, 32),
-      new THREE.MeshBasicMaterial({
-        color: 0x3b82f6,
-        transparent: true,
-        opacity: 0.1,
-      }),
+    const innerGlow =
+      new THREE.Mesh(
+        new THREE.SphereGeometry(
+          0.95,
+          32,
+          32,
+        ),
+        new THREE.MeshBasicMaterial({
+          color: 0x3b82f6,
+          transparent: true,
+          opacity: 0.12,
+        }),
+      );
+
+    coreGroup.add(
+      innerGlow,
     );
 
-    coreGroup.add(innerGlow);
+    // OUTER ENERGY SHELL
 
-    // ENERGY SHELL
-
-    const shell = new THREE.Mesh(
-      new THREE.SphereGeometry(2.3, 32, 32),
-      new THREE.MeshBasicMaterial({
-        color: 0x4df7ff,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.05,
-      }),
-    );
+    const shell =
+      new THREE.Mesh(
+        new THREE.SphereGeometry(
+          2.5,
+          32,
+          32,
+        ),
+        new THREE.MeshBasicMaterial({
+          color: 0x4df7ff,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.05,
+        }),
+      );
 
     coreGroup.add(shell);
 
+    // EXTRA CORE RING
+
+    const halo =
+      new THREE.Mesh(
+        new THREE.TorusGeometry(
+          3.2,
+          0.03,
+          16,
+          220,
+        ),
+        new THREE.MeshBasicMaterial({
+          color: 0xa78bfa,
+          transparent: true,
+          opacity: 0.2,
+        }),
+      );
+
+    halo.rotation.x =
+      Math.PI / 2;
+
+    coreGroup.add(halo);
+
     scene.add(coreGroup);
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
     // ORBITAL RINGS
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
 
-    const rings: THREE.Mesh[] = [];
+    const rings:
+      THREE.Mesh[] = [];
 
-    [0x4df7ff, 0xa78bfa, 0xe879f9, 0x3b82f6].forEach((color, i) => {
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(2.8 + i * 0.7, 0.02, 8, 200),
-        new THREE.MeshBasicMaterial({
-          color,
-          transparent: true,
-          opacity: 0.22 - i * 0.03,
-        }),
-      );
-
-      ring.rotation.x = i * 0.6;
-      ring.rotation.y = i * 0.4;
-
-      rings.push(ring);
-
-      scene.add(ring);
-    });
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // ENERGY PARTICLES
-    // ─────────────────────────────────────────────────────────────────────────
-
-    const particleGroup = new THREE.Group();
-
-    for (let i = 0; i < 120; i++) {
-      const particle = new THREE.Mesh(
-        new THREE.SphereGeometry(Math.random() * 0.03 + 0.015, 6, 6),
-        new THREE.MeshBasicMaterial({
-          color: i % 2 === 0 ? 0x4df7ff : 0xa78bfa,
-          transparent: true,
-          opacity: 0.8,
-        }),
-      );
-
-      const radius = 4 + Math.random() * 5;
-
-      particle.position.set(
-        (Math.random() - 0.5) * radius,
-        (Math.random() - 0.5) * radius,
-        (Math.random() - 0.5) * radius,
-      );
-
-      particleGroup.add(particle);
-    }
-
-    scene.add(particleGroup);
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // GRID FLOOR
-    // ─────────────────────────────────────────────────────────────────────────
-
-    const grid = new THREE.GridHelper(
-      100,
-      60,
+    [
       0x4df7ff,
-      0x4df7ff,
+      0xa78bfa,
+      0xe879f9,
+      0x3b82f6,
+    ].forEach(
+      (color, i) => {
+
+        const ring =
+          new THREE.Mesh(
+            new THREE.TorusGeometry(
+              3 +
+                i * 0.8,
+              0.02,
+              8,
+              220,
+            ),
+            new THREE.MeshBasicMaterial({
+              color,
+              transparent: true,
+              opacity:
+                0.22 -
+                i * 0.03,
+            }),
+          );
+
+        ring.rotation.x =
+          i * 0.55;
+
+        ring.rotation.y =
+          i * 0.4;
+
+        rings.push(ring);
+
+        scene.add(ring);
+      },
     );
 
-    const gridMat = grid.material as THREE.Material;
+    // ───────────────────────────────────────────────────────────────────────
+    // ENERGY PARTICLES
+    // ───────────────────────────────────────────────────────────────────────
 
-    gridMat.transparent = true;
+    const particleGroup =
+      new THREE.Group();
+
+    for (
+      let i = 0;
+      i < 180;
+      i++
+    ) {
+
+      const particle =
+        new THREE.Mesh(
+          new THREE.SphereGeometry(
+            Math.random() *
+              0.03 +
+              0.015,
+            6,
+            6,
+          ),
+          new THREE.MeshBasicMaterial({
+            color:
+              i % 2 === 0
+                ? 0x4df7ff
+                : 0xa78bfa,
+            transparent: true,
+            opacity: 0.8,
+          }),
+        );
+
+      const radius =
+        4 +
+        Math.random() * 6;
+
+      particle.position.set(
+        (Math.random() - 0.5) *
+          radius,
+        (Math.random() - 0.5) *
+          radius,
+        (Math.random() - 0.5) *
+          radius,
+      );
+
+      particleGroup.add(
+        particle,
+      );
+    }
+
+    scene.add(
+      particleGroup,
+    );
+
+    // ───────────────────────────────────────────────────────────────────────
+    // GRID FLOOR
+    // ───────────────────────────────────────────────────────────────────────
+
+    const grid =
+      new THREE.GridHelper(
+        120,
+        70,
+        0x4df7ff,
+        0x4df7ff,
+      );
+
+    const gridMat =
+      grid.material as
+        THREE.Material;
+
+    gridMat.transparent =
+      true;
+
     gridMat.opacity = 0.08;
 
     grid.position.y = -5;
 
     scene.add(grid);
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
     // SCANNING RINGS
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
 
-    const scanRings: THREE.Mesh[] = [];
+    const scanRings:
+      THREE.Mesh[] = [];
 
-    for (let i = 0; i < 4; i++) {
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(2.5 + i, 2.55 + i, 128),
-        new THREE.MeshBasicMaterial({
-          color: 0x4df7ff,
-          side: THREE.DoubleSide,
-          transparent: true,
-          opacity: 0.04,
-        }),
-      );
+    for (
+      let i = 0;
+      i < 5;
+      i++
+    ) {
 
-      ring.rotation.x = Math.PI / 2;
+      const ring =
+        new THREE.Mesh(
+          new THREE.RingGeometry(
+            2.5 + i,
+            2.56 + i,
+            128,
+          ),
+          new THREE.MeshBasicMaterial({
+            color: 0x4df7ff,
+            side:
+              THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.04,
+          }),
+        );
 
-      ring.position.y = -4.8 + i * 0.08;
+      ring.rotation.x =
+        Math.PI / 2;
+
+      ring.position.y =
+        -4.8 +
+        i * 0.08;
 
       scanRings.push(ring);
 
       scene.add(ring);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // PARALLAX
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
+    // MOUSE PARALLAX
+    // ───────────────────────────────────────────────────────────────────────
 
     let mx = 0;
     let my = 0;
 
-    const onMouse = (e: MouseEvent) => {
-      mx = (e.clientX / window.innerWidth - 0.5) * 2;
-      my = (e.clientY / window.innerHeight - 0.5) * 2;
+    const onMouse = (
+      e: MouseEvent,
+    ) => {
+
+      mx =
+        (e.clientX /
+          window.innerWidth -
+          0.5) *
+        2;
+
+      my =
+        (e.clientY /
+          window.innerHeight -
+          0.5) *
+        2;
     };
 
-    window.addEventListener("mousemove", onMouse);
+    window.addEventListener(
+      "mousemove",
+      onMouse,
+    );
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
     // RESIZE
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
 
-    const onResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+    const onResize =
+      () => {
 
-      camera.updateProjectionMatrix();
+        camera.aspect =
+          window.innerWidth /
+          window.innerHeight;
 
-      renderer.setSize(
-        window.innerWidth,
-        window.innerHeight,
-      );
-    };
+        camera.updateProjectionMatrix();
 
-    window.addEventListener("resize", onResize);
+        renderer.setSize(
+          window.innerWidth,
+          window.innerHeight,
+        );
+      };
 
-    // ─────────────────────────────────────────────────────────────────────────
+    window.addEventListener(
+      "resize",
+      onResize,
+    );
+
+    // ───────────────────────────────────────────────────────────────────────
     // ANIMATION LOOP
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
 
     let t = 0;
 
     const animate = () => {
-      rafRef.current = requestAnimationFrame(animate);
+
+      rafRef.current =
+        requestAnimationFrame(
+          animate,
+        );
 
       t += 0.0035;
 
-      // CORE
+      // CORE ROTATION
 
-      core.rotation.x += 0.002;
-      core.rotation.y += 0.003;
+      core.rotation.x +=
+        0.002;
 
-      shell.rotation.y -= 0.0015;
+      core.rotation.y +=
+        0.003;
 
-      // RINGS
+      shell.rotation.y -=
+        0.0015;
 
-      rings.forEach((ring, i) => {
-        ring.rotation.z += 0.001 + i * 0.0008;
-        ring.rotation.x += 0.0005;
-      });
+      halo.rotation.z +=
+        0.0018;
+
+      // ORBITAL RINGS
+
+      rings.forEach(
+        (ring, i) => {
+
+          ring.rotation.z +=
+            0.001 +
+            i * 0.0008;
+
+          ring.rotation.x +=
+            0.0005;
+        },
+      );
 
       // PARTICLES
 
-      particleGroup.rotation.y += 0.0008;
-      particleGroup.rotation.x += 0.0003;
+      particleGroup.rotation.y +=
+        0.0008;
 
-      particleGroup.children.forEach((p, i) => {
-        p.position.y += Math.sin(t + i) * 0.0015;
-      });
+      particleGroup.rotation.x +=
+        0.0003;
 
-      // STARS
+      particleGroup.children.forEach(
+        (p, i) => {
 
-      stars.rotation.y += 0.00015;
+          p.position.y +=
+            Math.sin(
+              t + i,
+            ) * 0.0015;
+        },
+      );
+
+      // STARFIELD
+
+      stars.rotation.y +=
+        0.00012;
 
       // SCAN RINGS
 
-scanRings.forEach((ring, i) => {
+      scanRings.forEach(
+        (ring, i) => {
 
-  const mat =
-    ring.material as THREE.MeshBasicMaterial;
+          const mat =
+            ring.material as
+              THREE.MeshBasicMaterial;
 
-  mat.opacity =
-    0.02 + Math.sin(t * 2 + i) * 0.02;
+          mat.opacity =
+            0.02 +
+            Math.sin(
+              t * 2 +
+                i,
+            ) *
+              0.02;
 
-});
+          ring.scale.x =
+            1 +
+            Math.sin(
+              t + i,
+            ) *
+              0.008;
+
+          ring.scale.y =
+            1 +
+            Math.sin(
+              t + i,
+            ) *
+              0.008;
+        },
+      );
+
+      // CORE FLOAT
+
+      coreGroup.position.y =
+        Math.sin(t * 1.8) *
+        0.18;
+
+      // LIGHT PULSE
+
+      cyanLight.intensity =
+        2.8 +
+        Math.sin(t * 3) *
+          0.5;
+
+      violetLight.intensity =
+        2 +
+        Math.sin(t * 2) *
+          0.3;
 
       // CAMERA PARALLAX
 
       camera.position.x +=
-        (mx * 2.2 - camera.position.x) * 0.03;
+        (mx * 2.5 -
+          camera.position.x) *
+        0.03;
 
       camera.position.y +=
-        (-my * 1.3 + 1.5 - camera.position.y) * 0.03;
+        (-my * 1.5 +
+          1.5 -
+          camera.position.y) *
+        0.03;
 
-      camera.lookAt(0, 0, 0);
+      camera.lookAt(
+        0,
+        0,
+        0,
+      );
 
-      renderer.render(scene, camera);
+      renderer.render(
+        scene,
+        camera,
+      );
     };
 
     animate();
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
     // CLEANUP
-    // ─────────────────────────────────────────────────────────────────────────
+    // ───────────────────────────────────────────────────────────────────────
 
     return () => {
-      cancelAnimationFrame(rafRef.current);
 
-      window.removeEventListener("mousemove", onMouse);
+      cancelAnimationFrame(
+        rafRef.current,
+      );
 
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener(
+        "mousemove",
+        onMouse,
+      );
+
+      window.removeEventListener(
+        "resize",
+        onResize,
+      );
 
       renderer.dispose();
+
+      starGeo.dispose();
     };
+
   }, []);
 
   return (
     <>
+
+      {/* THREE CANVAS */}
+
       <canvas
         ref={canvasRef}
-        className="pointer-events-none fixed inset-0 z-0 h-full w-full"
+        className="
+          pointer-events-none
+          fixed
+          inset-0
+          z-0
+          h-full
+          w-full
+          opacity-[0.95]
+        "
         aria-hidden
       />
 
+      {/* CINEMATIC GRADIENTS */}
+
       <div
-        className="pointer-events-none fixed inset-0 z-0"
+        className="
+          pointer-events-none
+          fixed
+          inset-0
+          z-0
+        "
         aria-hidden
         style={{
           background:
             `
-            radial-gradient(circle at 20% 30%, rgba(77,247,255,0.10), transparent 30%),
-            radial-gradient(circle at 80% 20%, rgba(167,139,250,0.10), transparent 30%),
-            radial-gradient(circle at 50% 80%, rgba(232,121,249,0.08), transparent 35%),
+            radial-gradient(circle at 20% 30%, rgba(77,247,255,0.12), transparent 30%),
+            radial-gradient(circle at 80% 20%, rgba(167,139,250,0.12), transparent 30%),
+            radial-gradient(circle at 50% 80%, rgba(232,121,249,0.10), transparent 35%),
             radial-gradient(circle at center, rgba(59,130,246,0.08), transparent 45%),
             linear-gradient(180deg, #02030a 0%, #050816 100%)
             `,
         }}
       />
 
+      {/* CYBER GRID */}
+
       <div
-        className="pointer-events-none fixed inset-0 z-0 opacity-[0.03]"
+        className="
+          pointer-events-none
+          fixed
+          inset-0
+          z-0
+          opacity-[0.03]
+        "
         aria-hidden
         style={{
           backgroundImage:
-            "linear-gradient(rgba(77,247,255,0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(77,247,255,0.25) 1px, transparent 1px)",
-          backgroundSize: "120px 120px",
+            `
+            linear-gradient(rgba(77,247,255,0.25) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(77,247,255,0.25) 1px, transparent 1px)
+            `,
+          backgroundSize:
+            "120px 120px",
         }}
       />
+
+      {/* VIGNETTE */}
+
+      <div
+        className="
+          pointer-events-none
+          fixed
+          inset-0
+          z-0
+        "
+        style={{
+          background:
+            `
+            radial-gradient(
+              circle at center,
+              transparent 40%,
+              rgba(0,0,0,0.45) 100%
+            )
+            `,
+        }}
+      />
+
     </>
   );
 }

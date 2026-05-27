@@ -371,6 +371,49 @@ export interface GridDashboardData {
   };
 }
 
+// ─── Campaign System ─────────────────────────────────────────────────────────
+
+export type CampaignType =
+  | "GLOBAL"
+  | "TIER"
+  | "EVENT"
+  | "SEGMENTED"
+  | "TARGETED";
+
+export interface GridCampaign {
+  id: string;
+
+  type: CampaignType;
+
+  title: string;
+
+  description?: string;
+
+  amount: number;
+
+  active: boolean;
+
+  targetTiers?: GridTierKey[];
+
+  targetMemberIds?: string[];
+
+  excludeFraudHold?: boolean;
+
+  minimumLifetimeCreds?: number;
+
+  minimumOrders?: number;
+
+  startAt?: string;
+
+  endAt?: string;
+
+  eventKey?: string;
+
+  createdBy: string;
+
+  createdAt: string;
+}
+
 // ─── Tier definitions ─────────────────────────────────────────────────────────
 
 export const GRID_TIERS: GridTier[] = [
