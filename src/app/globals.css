@@ -285,6 +285,8 @@ body {
   position: absolute;
   inset: -50%;
 
+  pointer-events: none;
+
   background:
     conic-gradient(
       from 180deg,
