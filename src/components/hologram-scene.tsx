@@ -1,5 +1,9 @@
 "use client";
 
+const isMobile =
+  typeof window !== "undefined" &&
+  window.innerWidth < 768;
+
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
@@ -689,8 +693,12 @@ export function HologramScene() {
 
   }, []);
 
-  return (
-    <>
+  if (isMobile) {
+  return null;
+}
+
+return (
+  <>
 
       {/* THREE CANVAS */}
 

@@ -503,13 +503,15 @@ export function GridExperience() {
   const d = dashboard;
 
   const redeemPreview =
-    Number.isFinite(
-      Number(credsInput),
-    )
-      ? credsToRupees(
-          Number(credsInput),
-        )
-      : 0;
+  Number.isFinite(
+    Number(credsInput),
+  )
+    ? credsToRupees(
+        Number(credsInput),
+        d.globalStats
+          ?.conversionRate ?? 100,
+      )
+    : 0;
 
   return (
   <main className="relative min-h-screen overflow-x-hidden overflow-y-auto touch-pan-y px-4 py-6 md:px-6 md:py-8">

@@ -179,6 +179,7 @@ export interface GlobalStats {
   totalSavingsRupees:       number;
   suspendedUsers:           number;
   usersOnFraudHold:         number;
+  conversionRate?: number;
 }
 
 export interface LeaderboardPage {
@@ -501,21 +502,16 @@ export function rupeesToCreds(rupees: number): number {
 }
 
 /** 100 Creds = ₹1 */
-import {
-  getConversionRate,
-} from "@/server/economy";
 
 export function credsToRupees(
   creds: number,
+  conversionRate = 100,
 ): number {
-
-  const rate =
-    getConversionRate();
 
   return Math.max(
     Number(
       (
-        creds / rate
+        creds / conversionRate
       ).toFixed(2),
     ),
     0,
