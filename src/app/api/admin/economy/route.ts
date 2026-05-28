@@ -1,15 +1,47 @@
-import { NextResponse } from "next/server";
+import {
+  NextRequest,
+} from "next/server";
+
+import {
+  DEFAULT_CREDS_PER_RUPEE,
+  normalizeCredsPerRupee,
+} from "@/lib/grid";
+
+import { requireAdmin } from "@/server/admin-auth";
 
 import {
   getConversionRate,
   setConversionRate,
 } from "@/server/economy";
 
+import {
+  AppError,
+  ErrorCode,
+} from "@/server/errors";
+
+import {
+  handleRouteError,
+  optionsResponse,
+  successResponse,
+} from "@/server/http";
+
+export async function OPTIONS(
+  request: NextRequest,
+) {
+  return optionsResponse(request);
+}
+
 export async function POST(
-  request: Request,
+  request: NextRequest,
 ) {
 
   try {
+
+    const auth =
+      await requireAdmin(
+        request,
+        "owner",
+      );
 
     const body =
       await request.json();
@@ -23,48 +55,70 @@ export async function POST(
       !Number.isFinite(
         conversionRate,
       ) ||
-      conversionRate <= 0
+      conversionRate <= 0 ||
+      !Number.isInteger(
+        conversionRate,
+      )
     ) {
 
-      return NextResponse.json(
-        {
-          error:
-            "Invalid conversion rate",
-        },
-        {
-          status: 400,
-        },
+      throw new AppError(
+        "Invalid conversion rate",
+        400,
+        ErrorCode.VALIDATION_ERROR,
       );
     }
 
-    setConversionRate(
-  conversionRate,
-);
+    await setConversionRate(
+      normalizeCredsPerRupee(
+        conversionRate,
+      ),
+      auth.user.memberId,
+    );
 
-    return NextResponse.json({
-      success: true,
-      conversionRate:
-  getConversionRate(),
-    });
+    const savedConversionRate =
+      normalizeCredsPerRupee(
+        Number(
+          await getConversionRate(),
+        ),
+      );
 
-  } catch {
-
-    return NextResponse.json(
+    return successResponse(
       {
-        error:
-          "Failed to update economy",
+        conversionRate:
+          savedConversionRate,
+        message:
+          `Economy updated: ${savedConversionRate} Creds = ₹1.`,
       },
-      {
-        status: 500,
-      },
+      200,
+      request,
+    );
+
+  } catch (error) {
+
+    return handleRouteError(
+      error,
+      request,
     );
   }
 }
 
-export async function GET() {
+export async function GET(
+  request: NextRequest,
+) {
 
-  return NextResponse.json({
-    conversionRate:
-  getConversionRate(),
-  });
+  const conversionRate =
+    normalizeCredsPerRupee(
+      Number(
+        await getConversionRate(),
+      ) || DEFAULT_CREDS_PER_RUPEE,
+    );
+
+  return successResponse(
+    {
+      conversionRate:
+        conversionRate,
+    },
+    200,
+    request,
+  );
 }

@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { redeemMemberCreds } from "@/server/coupon-service";
+import { getConversionRate } from "@/server/economy";
 import { AppError, ErrorCode } from "@/server/errors";
 
 import {
@@ -32,7 +33,6 @@ const redeemSchema = z.object({
     })
     .int("creds must be an integer")
     .positive("creds must be positive")
-    .multipleOf(100, "creds must be a multiple of 100")
     .max(
       1_000_000,
       "creds cannot exceed 1,000,000",
@@ -112,6 +112,23 @@ export async function POST(
         parsed.error.issues
           .map((i) => i.message)
           .join("; "),
+        400,
+        ErrorCode.VALIDATION_ERROR,
+      );
+    }
+
+    const conversionRate =
+      Number(
+        await getConversionRate(),
+      );
+
+    if (
+      !Number.isFinite(conversionRate) ||
+      conversionRate <= 0 ||
+      parsed.data.creds % conversionRate !== 0
+    ) {
+      throw new AppError(
+        `creds must convert to a whole rupee at the current rate (${conversionRate} Creds = ₹1).`,
         400,
         ErrorCode.VALIDATION_ERROR,
       );

@@ -5,9 +5,11 @@ import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 
 import {
+  DEFAULT_CREDS_PER_RUPEE,
   credsToRupees,
   formatCompactNumber,
   formatIndianCurrency,
+  normalizeCredsPerRupee,
   type CreditTransaction,
   type GridCouponRecord,
   type GridDashboardData,
@@ -185,6 +187,8 @@ export function GridExperience() {
   const [syncing, setSyncing] = useState(false);
   const [redeeming, setRedeeming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] =
+    useState<string | null>(null);
   const [credsInput, setCredsInput] = useState("1000");
   const [showTx, setShowTx] = useState(false);
   const [showAch, setShowAch] = useState(false);
@@ -220,6 +224,7 @@ export function GridExperience() {
     try {
       setLoading(true);
       setError(null);
+      setMessage(null);
 
       const d = await gFetch<GridDashboardData>(
         "/api/dashboard",
@@ -253,12 +258,16 @@ export function GridExperience() {
     try {
       setSyncing(true);
       setError(null);
+      setMessage(null);
 
       const p = await gFetch<{
         dashboard: GridDashboardData;
       }>("/api/sync", { method: "POST" });
 
       setDashboard(p.dashboard);
+      setMessage(
+        "Grid sync complete. Your ledger is up to date.",
+      );
     } catch (e) {
       setError(
         (e as Error).message ?? "Sync failed.",
@@ -276,6 +285,7 @@ export function GridExperience() {
     try {
       setRedeeming(true);
       setError(null);
+      setMessage(null);
 
       const idempotencyKey = crypto.randomUUID();
 
@@ -294,6 +304,11 @@ export function GridExperience() {
       });
 
       setDashboard(p.dashboard);
+      setMessage(
+        `Coupon ${p.coupon.code} generated for ${formatIndianCurrency(
+          p.coupon.valueRupees,
+        )}.`,
+      );
     } catch (e) {
       setError(
         (e as Error).message ??
@@ -379,18 +394,30 @@ export function GridExperience() {
 
   const d = dashboard;
 
+  const conversionRate =
+    normalizeCredsPerRupee(
+      d.globalStats?.conversionRate ??
+        DEFAULT_CREDS_PER_RUPEE,
+    );
+
   const redeemPreview = Number.isFinite(
     Number(credsInput),
   )
     ? credsToRupees(
         Number(credsInput),
-        d.globalStats?.conversionRate ?? 100,
+        conversionRate,
       )
     : 0;
 
   /* MAIN DASHBOARD */
   return (
-    <main className="relative min-h-screen overflow-x-hidden px-4 py-8 md:px-6 md:py-10">
+    <main
+      className="relative min-h-screen overflow-x-hidden px-4 py-8 antialiased md:px-6 md:py-10"
+      style={{
+        textRendering:
+          "geometricPrecision",
+      }}
+    >
       {/* BACKGROUND - DESKTOP ONLY */}
       <div className="hidden md:block absolute inset-0 -z-10">
         <HologramScene />
@@ -731,6 +758,9 @@ export function GridExperience() {
                       {formatIndianCurrency(
                         redeemPreview,
                       )}
+                    </p>
+                    <p className="mt-2 text-[10px] uppercase tracking-[0.24em] text-grid-muted">
+                      {conversionRate} Creds = ₹1
                     </p>
                   </div>
 
@@ -1341,12 +1371,16 @@ export function GridExperience() {
         </section>
 
         {/* ERROR STATE */}
-        {error && (
+        {(error || message) && (
           <motion.div
             {...fadeUp(0)}
-            className="rounded-lg border border-grid-crimson/30 bg-grid-crimson/10 p-4 text-sm text-grid-crimson/90"
+            className={
+              error
+                ? "rounded-lg border border-grid-crimson/30 bg-grid-crimson/10 p-4 text-sm text-grid-crimson/90"
+                : "rounded-lg border border-grid-gold/25 bg-grid-gold/8 p-4 text-sm text-grid-gold"
+            }
           >
-            {error}
+            {error ?? message}
           </motion.div>
         )}
       </div>

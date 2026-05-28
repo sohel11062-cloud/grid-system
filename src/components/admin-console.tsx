@@ -20,8 +20,11 @@ import type {
 } from "@/lib/grid";
 
 import {
+  DEFAULT_CREDS_PER_RUPEE,
+  GRID_TIERS,
   formatCompactNumber,
   formatIndianCurrency,
+  normalizeCredsPerRupee,
 } from "@/lib/grid";
 
 import { AnimatedCounter } from "@/components/animated-counter";
@@ -212,11 +215,14 @@ export function AdminConsole() {
       "GLOBAL",
     );
 
+  const [campaignTier, setCampaignTier] =
+    useState<GridTierKey>("THE_GLITCH");
+
   const [orderId, setOrderId] =
     useState("");
 
   const [conversionRate, setConversionRate] =
-    useState("100");
+    useState(String(DEFAULT_CREDS_PER_RUPEE));
 
   /* LOAD DATA */
   const load = useCallback(async () => {
@@ -232,6 +238,31 @@ export function AdminConsole() {
         );
 
       setData(payload);
+
+      if (payload.globalStats.conversionRate) {
+        setConversionRate(
+          String(
+            normalizeCredsPerRupee(
+              payload.globalStats.conversionRate,
+            ),
+          ),
+        );
+      } else if (
+        payload.admin.roles.includes("owner")
+      ) {
+        const economy =
+          await gFetch<{
+            conversionRate: number;
+          }>("/api/admin/economy");
+
+        setConversionRate(
+          String(
+            normalizeCredsPerRupee(
+              economy.conversionRate,
+            ),
+          ),
+        );
+      }
 
       if (
         payload.users.length > 0 &&
@@ -336,6 +367,7 @@ export function AdminConsole() {
   async function mutate(
     path: string,
     body: Record<string, unknown>,
+    successMessage = "Action executed and recorded.",
   ) {
 
     try {
@@ -356,9 +388,7 @@ export function AdminConsole() {
         }),
       });
 
-      setMessage(
-        "Action executed and recorded.",
-      );
+      setMessage(successMessage);
 
       await load();
 
@@ -372,7 +402,13 @@ export function AdminConsole() {
   if (loading && !data) {
 
     return (
-      <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
+      <main
+        className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 antialiased"
+        style={{
+          textRendering:
+            "geometricPrecision",
+        }}
+      >
 
         <div className="hidden md:block absolute inset-0 -z-10">
           <HologramScene />
@@ -396,7 +432,13 @@ export function AdminConsole() {
 
   /* MAIN RENDER */
   return (
-    <main className="relative min-h-screen overflow-x-hidden px-4 py-8 md:px-6 md:py-10">
+    <main
+      className="relative min-h-screen overflow-x-hidden px-4 py-8 antialiased md:px-6 md:py-10"
+      style={{
+        textRendering:
+          "geometricPrecision",
+      }}
+    >
 
       {/* BACKGROUND - DESKTOP ONLY */}
       <div className="hidden md:block absolute inset-0 -z-10">
@@ -806,6 +848,7 @@ export function AdminConsole() {
                             Number(amount),
                           reason,
                         },
+                        "Cred adjustment applied and ledger refreshed.",
                       )
                     }
                   >
@@ -884,8 +927,33 @@ export function AdminConsole() {
 
                 </select>
 
+                {campaignType === "TIER" && (
+                  <select
+                    className="grid-input"
+                    value={campaignTier}
+                    onChange={(e) =>
+                      setCampaignTier(
+                        e.target.value as GridTierKey,
+                      )
+                    }
+                  >
+                    {GRID_TIERS.map((tier) => (
+                      <option
+                        key={tier.key}
+                        value={tier.key}
+                      >
+                        {tier.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
                 <input
-                  className="grid-input md:col-span-2"
+                  className={
+                    campaignType === "TIER"
+                      ? "grid-input"
+                      : "grid-input md:col-span-2"
+                  }
                   placeholder="Event Key / Campaign Reason"
                   value={eventKey}
                   onChange={(e) =>
@@ -905,7 +973,14 @@ export function AdminConsole() {
                         Number(campaignAmount),
                       reason: eventKey,
                       campaignType,
+                      targetTier:
+                        campaignType === "TIER"
+                          ? campaignTier
+                          : undefined,
                     },
+                    campaignType === "TIER"
+                      ? `Tier campaign launched for ${campaignTier}.`
+                      : "Campaign launched and recorded.",
                   )
                 }
               >
@@ -957,7 +1032,9 @@ export function AdminConsole() {
                           e.target.value,
                         )
                       }
-                      placeholder="100"
+                      placeholder={String(
+                        DEFAULT_CREDS_PER_RUPEE,
+                      )}
                       inputMode="numeric"
                     />
 
@@ -986,6 +1063,7 @@ export function AdminConsole() {
                         conversionRate:
                           Number(conversionRate),
                       },
+                      `Economy updated: ${conversionRate} Creds = ₹1.`,
                     )
                   }
                 >

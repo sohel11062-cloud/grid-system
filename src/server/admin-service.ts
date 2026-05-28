@@ -117,22 +117,57 @@ export async function triggerBonusCampaign(input: {
   actor: AdminActor;
   amount: number;
   reason: string;
+  campaignType?: "GLOBAL" | "TIER" | "EVENT";
+  targetTiers?: GridTierKey[];
+  eventKey?: string;
   idempotencyKey?: string;
 }) {
   if (!Number.isInteger(input.amount) || input.amount <= 0) {
     throw new AppError("Campaign amount must be a positive integer.", 400, ErrorCode.VALIDATION_ERROR);
   }
   const idempotencyKey = requireIdempotency(input.idempotencyKey);
+  const campaignType =
+    input.campaignType ?? "GLOBAL";
+
+  if (
+    campaignType === "TIER" &&
+    (!input.targetTiers || input.targetTiers.length === 0)
+  ) {
+    throw new AppError(
+      "A target tier is required for tier campaigns.",
+      400,
+      ErrorCode.VALIDATION_ERROR,
+    );
+  }
+
   const { action, replayed } = await saveAction({
     actor: input.actor,
     type: "BONUS_CAMPAIGN",
     amount: input.amount,
     reason: input.reason,
     idempotencyKey,
+    metadata: {
+      campaignType,
+      targetTiers:
+        input.targetTiers,
+      eventKey:
+        input.eventKey,
+    },
   });
   if (replayed) return { action, updated: 0, replayed };
 
-  const users = await getRepository().listUsers({ status: "ACTIVE", limit: 10_000 });
+  const users = (
+    await getRepository().listUsers({ status: "ACTIVE", limit: 10_000 })
+  ).filter((user) => {
+    if (campaignType !== "TIER") {
+      return true;
+    }
+
+    return input.targetTiers?.includes(
+      user.rankOverride ?? user.level,
+    );
+  });
+
   let updated = 0;
   for (const user of users) {
     const ledger = await getRepository().atomicCreditAdjustment(
@@ -148,15 +183,31 @@ export async function triggerBonusCampaign(input: {
       ledger.availableCreds,
       `${action.id}:${user.memberId}`,
       `Campaign bonus: ${input.reason}`,
-      { campaignActionId: action.id },
+      {
+        campaignActionId: action.id,
+        campaignType,
+        targetTiers:
+          input.targetTiers,
+        eventKey:
+          input.eventKey,
+      },
     );
   }
   await writeAuditLog({
     action: "ADMIN_BONUS_CAMPAIGN",
-    message: "Admin triggered a global bonus campaign.",
+    message: "Admin triggered a bonus campaign.",
     actorMemberId: input.actor.memberId,
     actorEmail: input.actor.email,
-    metadata: { amount: input.amount, updated, actionId: action.id },
+    metadata: {
+      amount: input.amount,
+      updated,
+      actionId: action.id,
+      campaignType,
+      targetTiers:
+        input.targetTiers,
+      eventKey:
+        input.eventKey,
+    },
   });
   return { action, updated, replayed };
 }

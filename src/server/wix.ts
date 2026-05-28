@@ -43,6 +43,25 @@ export interface WixContact {
 export interface WixOrder {
   id: string;
 
+  buyerInfo?: {
+    memberId?: string;
+    contactId?: string;
+    customerId?: string;
+    email?: string;
+  };
+
+  buyer?: {
+    memberId?: string;
+    contactId?: string;
+    customerId?: string;
+    email?: string;
+  };
+
+  customerId?: string;
+  memberId?: string;
+  contactId?: string;
+  email?: string;
+
   number?: string;
 
   status?: string;
@@ -538,6 +557,7 @@ export async function searchOrdersByIdentity(
   identity: {
     memberId?: string | null;
     contactId?: string | null;
+    customerId?: string | null;
     email?: string | null;
   },
 ): Promise<WixOrder[]> {
@@ -562,6 +582,15 @@ export async function searchOrdersByIdentity(
     conditions.push({
       "buyerInfo.contactId": {
         $eq: identity.contactId,
+      },
+    });
+  }
+
+  if (identity.customerId) {
+
+    conditions.push({
+      "buyerInfo.customerId": {
+        $eq: identity.customerId,
       },
     });
   }
@@ -613,8 +642,155 @@ export async function searchOrdersByIdentity(
           },
         );
 
-      return response.orders ?? [];
+      const orders =
+        response.orders ?? [];
+
+      const scopedOrders =
+        orders.filter((order) =>
+          orderMatchesIdentity(
+            order,
+            identity,
+          ),
+        );
+
+      if (scopedOrders.length !== orders.length) {
+        console.warn(
+          "[GRID_WIX_ORDER_SCOPE_DROP]",
+          {
+            memberId:
+              identity.memberId,
+            contactId:
+              identity.contactId,
+            customerId:
+              identity.customerId,
+            email:
+              identity.email,
+            received:
+              orders.length,
+            accepted:
+              scopedOrders.length,
+          },
+        );
+      }
+
+      return scopedOrders;
     },
+  );
+}
+
+function normalizedIdentityValue(
+  value: unknown,
+): string | null {
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized =
+    value.trim().toLowerCase();
+
+  return normalized.length > 0
+    ? normalized
+    : null;
+}
+
+function hasMatchingValue(
+  expected: Array<string | null>,
+  actual: Array<unknown>,
+): boolean {
+
+  const expectedSet =
+    new Set(
+      expected.filter(
+        (value): value is string => Boolean(value),
+      ),
+    );
+
+  if (expectedSet.size === 0) {
+    return false;
+  }
+
+  return actual.some((value) => {
+    const normalized =
+      normalizedIdentityValue(value);
+
+    return normalized
+      ? expectedSet.has(normalized)
+      : false;
+  });
+}
+
+function orderMatchesIdentity(
+  order: WixOrder,
+  identity: {
+    memberId?: string | null;
+    contactId?: string | null;
+    customerId?: string | null;
+    email?: string | null;
+  },
+): boolean {
+
+  const memberId =
+    normalizedIdentityValue(
+      identity.memberId,
+    );
+
+  const contactId =
+    normalizedIdentityValue(
+      identity.contactId,
+    );
+
+  const customerId =
+    normalizedIdentityValue(
+      identity.customerId,
+    );
+
+  const email =
+    normalizedIdentityValue(
+      identity.email,
+    );
+
+  return (
+    hasMatchingValue(
+      [
+        memberId,
+      ],
+      [
+        order.buyerInfo?.memberId,
+        order.buyer?.memberId,
+        order.memberId,
+      ],
+    ) ||
+    hasMatchingValue(
+      [
+        contactId,
+      ],
+      [
+        order.buyerInfo?.contactId,
+        order.buyer?.contactId,
+        order.contactId,
+      ],
+    ) ||
+    hasMatchingValue(
+      [
+        customerId,
+      ],
+      [
+        order.buyerInfo?.customerId,
+        order.buyer?.customerId,
+        order.customerId,
+      ],
+    ) ||
+    hasMatchingValue(
+      [
+        email,
+      ],
+      [
+        order.buyerInfo?.email,
+        order.buyer?.email,
+        order.email,
+      ],
+    )
   );
 }
 

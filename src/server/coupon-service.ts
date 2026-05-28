@@ -7,6 +7,8 @@ import {
   type RedemptionRecord,
 } from "@/lib/grid";
 
+import { getConversionRate } from "@/server/economy";
+
 import { AppError, ErrorCode } from "@/server/errors";
 
 import {
@@ -72,10 +74,13 @@ export async function redeemMemberCreds(
     );
   }
 
-  if (creds % 100 !== 0) {
+  const conversionRate =
+    await getConversionRate();
+
+  if (creds % conversionRate !== 0) {
 
     throw new AppError(
-      "Redemptions must be in multiples of 100 Creds.",
+      `Redemptions must convert to a whole rupee at the current rate (${conversionRate} Creds = ₹1).`,
       400,
       ErrorCode.VALIDATION_ERROR,
     );
@@ -187,7 +192,10 @@ export async function redeemMemberCreds(
 
   const rupeeValue =
     Math.floor(
-      credsToRupees(creds),
+      credsToRupees(
+        creds,
+        conversionRate,
+      ),
     );
 
   if (rupeeValue <= 0) {
@@ -455,6 +463,7 @@ export async function redeemMemberCreds(
       metadata: {
         creds,
         rupeeValue,
+        conversionRate,
       },
     });
 
@@ -683,6 +692,8 @@ export async function redeemMemberCreds(
       creds,
 
       rupeeValue,
+
+      conversionRate,
     },
   });
 

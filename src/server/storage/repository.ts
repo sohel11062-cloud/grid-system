@@ -6,6 +6,7 @@ import type {
   AuditLog,
   CreditTransaction,
   GlobalStats,
+  GridEconomyConfig,
   GridCouponRecord,
   GridCouponStatus,
   GridLeaderboardEntry,
@@ -18,6 +19,9 @@ import type {
   OrderHistory,
   RedemptionRecord,
   SyncJob,
+} from "@/lib/grid";
+import {
+  DEFAULT_CREDS_PER_RUPEE,
 } from "@/lib/grid";
 import { getEnv } from "@/server/env";
 
@@ -78,6 +82,8 @@ export interface GridRepository {
   }): Promise<GridLeaderboardEntry[]>;
   getMemberRank(memberId: string): Promise<{ rank: number | null; total: number }>;
   getGlobalStats(): Promise<GlobalStats>;
+  getEconomyConfig(): Promise<GridEconomyConfig | null>;
+  saveEconomyConfig(config: GridEconomyConfig): Promise<GridEconomyConfig>;
   getAllMemberIds(): Promise<string[]>;
 
   // Coupons
@@ -166,6 +172,8 @@ const COL_LEADERBOARD_SNAPSHOTS = "leaderboard_snapshots";
 const COL_ADMIN_ACTIONS         = "admin_actions";
 const COL_AUDIT_LOGS            = "audit_logs";
 const COL_SYNC_JOBS             = "sync_jobs";
+const COL_SYSTEM_CONFIG         = "system_config";
+const ECONOMY_CONFIG_ID         = "economy";
 
 // ─── Globals ──────────────────────────────────────────────────────────────────
 
@@ -272,6 +280,7 @@ class MemoryGridRepository implements GridRepository {
   private auditLogs: AuditLog[] = [];
   private adminActions: AdminAction[] = [];
   private syncJobs = new Map<string, SyncJob>();
+  private economyConfig: GridEconomyConfig | null = null;
 
   async getUser(memberId: string) {
     return this.members.get(memberId) ?? null;
@@ -477,6 +486,27 @@ class MemoryGridRepository implements GridRepository {
         .reduce((s, c) => s + c.valueRupees, 0),
       suspendedUsers: users.filter((u) => u.status !== "ACTIVE").length,
       usersOnFraudHold: users.filter((u) => !!u.fraudHold).length,
+      conversionRate:
+        this.economyConfig?.credsPerRupee ??
+        DEFAULT_CREDS_PER_RUPEE,
+    };
+  }
+
+  async getEconomyConfig() {
+    return this.economyConfig
+      ? {
+          ...this.economyConfig,
+        }
+      : null;
+  }
+
+  async saveEconomyConfig(config: GridEconomyConfig) {
+    this.economyConfig = {
+      ...config,
+    };
+
+    return {
+      ...this.economyConfig,
     };
   }
 
@@ -1022,6 +1052,9 @@ class MongoGridRepository implements GridRepository {
     ]);
     const u = userAgg[0] as Partial<GlobalStats> | undefined;
     const c = couponAgg[0] as Partial<GlobalStats> | undefined;
+    const economy =
+      await this.getEconomyConfig();
+
     return {
       activeUsers: u?.activeUsers ?? 0,
       totalCredsIssued: u?.totalCredsIssued ?? 0,
@@ -1033,7 +1066,52 @@ class MongoGridRepository implements GridRepository {
       totalSavingsRupees: c?.totalSavingsRupees ?? 0,
       suspendedUsers: u?.suspendedUsers ?? 0,
       usersOnFraudHold: u?.usersOnFraudHold ?? 0,
+      conversionRate:
+        economy?.credsPerRupee ??
+        DEFAULT_CREDS_PER_RUPEE,
     };
+  }
+
+  async getEconomyConfig() {
+    const db =
+      await this.db();
+
+    const doc =
+      await db.collection<
+        GridEconomyConfig & { _id: string }
+      >(COL_SYSTEM_CONFIG).findOne(
+        {
+          _id: ECONOMY_CONFIG_ID,
+        },
+        {
+          projection: {
+            _id: 0,
+          },
+        },
+      );
+
+    return doc ?? null;
+  }
+
+  async saveEconomyConfig(config: GridEconomyConfig) {
+    const db =
+      await this.db();
+
+    await db.collection<
+      GridEconomyConfig & { _id: string }
+    >(COL_SYSTEM_CONFIG).updateOne(
+      {
+        _id: ECONOMY_CONFIG_ID,
+      },
+      {
+        $set: config,
+      },
+      {
+        upsert: true,
+      },
+    );
+
+    return config;
   }
 
   async getAllMemberIds() {

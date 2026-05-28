@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { requireAdmin } from "@/server/admin-auth";
+import type { GridTierKey } from "@/lib/grid";
 
 import { triggerBonusCampaign } from "@/server/admin-service";
 
@@ -26,6 +27,14 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 // Validation Schema
 // ─────────────────────────────────────────────────────────────────────────────
+
+const GRID_TIER_KEYS = [
+  "THE_GLITCH",
+  "NETRUNNER",
+  "SYS-ADMIN",
+  "THE_ARCHITECT",
+  "THE_SINGULARITY",
+] as const satisfies readonly GridTierKey[];
 
 const schema = z.object({
   amount: z
@@ -51,12 +60,38 @@ const schema = z.object({
       "reason cannot exceed 500 characters",
     ),
 
+  campaignType: z
+    .enum([
+      "GLOBAL",
+      "TIER",
+      "EVENT",
+    ])
+    .default("GLOBAL"),
+
+  targetTier: z
+    .enum(GRID_TIER_KEYS)
+    .optional(),
+
   idempotencyKey: z
     .string()
     .min(
       12,
       "idempotencyKey must be at least 12 characters",
     ),
+}).superRefine((body, ctx) => {
+  if (
+    body.campaignType === "TIER" &&
+    !body.targetTier
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [
+        "targetTier",
+      ],
+      message:
+        "targetTier is required for tier campaigns",
+    });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -151,6 +186,12 @@ export async function POST(
         reason:
           body.reason,
 
+        campaignType:
+          body.campaignType,
+
+        targetTier:
+          body.targetTier,
+
         ip:
           request.headers.get(
             "x-forwarded-for",
@@ -160,8 +201,7 @@ export async function POST(
 
     // ── Execute campaign ────────────────────────────────────────────────────
 
-    const result =
-      await triggerBonusCampaign({
+    const campaignInput = {
         actor: {
           memberId:
             auth.user.memberId,
@@ -176,9 +216,31 @@ export async function POST(
         reason:
           body.reason,
 
+        campaignType:
+          body.campaignType,
+
+        targetTiers:
+          body.targetTier
+            ? [
+                body.targetTier,
+              ]
+            : undefined,
+
+        eventKey:
+          body.campaignType === "EVENT"
+            ? body.reason
+            : undefined,
+
         idempotencyKey:
           key,
-      });
+      } as Parameters<
+        typeof triggerBonusCampaign
+      >[0];
+
+    const result =
+      await triggerBonusCampaign(
+        campaignInput,
+      );
 
     // ── Success logging ─────────────────────────────────────────────────────
 

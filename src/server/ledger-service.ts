@@ -102,7 +102,7 @@ async function transactionExists(
       await repo.listCreditTransactions(
         memberId,
         {
-          limit: 100,
+          limit: 5000,
         },
       );
 

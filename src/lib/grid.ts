@@ -425,6 +425,8 @@ export interface GridEconomyConfig {
   updatedBy?: string;
 }
 
+export const DEFAULT_CREDS_PER_RUPEE = 100;
+
 // ─── Tier definitions ─────────────────────────────────────────────────────────
 
 export const GRID_TIERS: GridTier[] = [
@@ -501,12 +503,26 @@ export function rupeesToCreds(rupees: number): number {
   return Math.max(Math.floor(rupees), 0);
 }
 
-/** 100 Creds = ₹1 */
+export function normalizeCredsPerRupee(
+  value: number | null | undefined,
+): number {
+
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value > 0
+    ? Math.round(value)
+    : DEFAULT_CREDS_PER_RUPEE;
+}
 
 export function credsToRupees(
   creds: number,
-  conversionRate = 100,
+  credsPerRupee = DEFAULT_CREDS_PER_RUPEE,
 ): number {
+
+  const conversionRate =
+    normalizeCredsPerRupee(
+      credsPerRupee,
+    );
 
   return Math.max(
     Number(
