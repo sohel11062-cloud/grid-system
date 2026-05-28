@@ -25,14 +25,13 @@ const HologramScene = dynamic(
     ),
   {
     ssr: false,
-    loading: () => (
-      <div
-        className="pointer-events-none fixed inset-0"
-        aria-hidden
-      />
-    ),
+    loading: () => null,
   },
 );
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   UTILITIES
+───────────────────────────────────────────────────────────────────────────── */
 
 async function gFetch<T>(
   path: string,
@@ -43,10 +42,7 @@ async function gFetch<T>(
     credentials: "include",
     headers: {
       ...(init?.body
-        ? {
-            "Content-Type":
-              "application/json",
-          }
+        ? { "Content-Type": "application/json" }
         : {}),
       ...init?.headers,
     },
@@ -55,86 +51,58 @@ async function gFetch<T>(
   if (!res.ok) {
     const p = (await res
       .json()
-      .catch(() => null)) as {
-      error?: string;
-    } | null;
+      .catch(() => null)) as { error?: string } | null;
 
     const e = new Error(
-      p?.error ??
-        `HTTP ${res.status}`,
+      p?.error ?? `HTTP ${res.status}`,
     );
 
-    (
-      e as Error & {
-        status?: number;
-      }
-    ).status = res.status;
-
+    (e as Error & { status?: number }).status = res.status;
     throw e;
   }
 
   return res.json() as Promise<T>;
 }
 
-function fmtDate(
-  v?: string | null,
-) {
+function fmtDate(v?: string | null) {
   if (!v) return "—";
 
-  return new Intl.DateTimeFormat(
-    "en-IN",
-    {
-      dateStyle: "medium",
-      timeStyle: "short",
-    },
-  ).format(new Date(v));
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(v));
 }
 
-const ease = [
-  0.22,
-  1,
-  0.36,
-  1,
-] as const;
-
-const fadeUp = (
-  delay = 0,
-) => ({
-  initial: {
-    opacity: 0,
-    y: 24,
-  },
-  animate: {
-    opacity: 1,
-    y: 0,
-  },
+/* MOTION CONSTANTS - REDUCED */
+const fadeUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
   transition: {
     delay,
-    duration: 0.8,
-    ease,
+    duration: 0.6,
+    ease: [0.22, 1, 0.36, 1],
   },
 });
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   COMPONENTS
+───────────────────────────────────────────────────────────────────────────── */
 
 function StatusDot({
   status,
 }: {
-  status:
-    | "ONLINE"
-    | "DEGRADED"
-    | "SYNCING";
+  status: "ONLINE" | "DEGRADED" | "SYNCING";
 }) {
   const cls =
     status === "ONLINE"
       ? "status-dot-online"
-      : status ===
-        "SYNCING"
-      ? "status-dot-syncing"
-      : "status-dot-degraded";
+      : status === "SYNCING"
+        ? "status-dot-syncing"
+        : "status-dot-degraded";
 
   return (
     <div className="flex items-center gap-2">
       <span className={cls} />
-
       <span className="text-[10px] uppercase tracking-[0.34em] text-grid-muted">
         {status}
       </span>
@@ -149,17 +117,16 @@ function CouponBadge({
 }) {
   const cls =
     status === "ACTIVE"
-      ? "text-grid-cyan"
+      ? "text-green-600"
       : status === "USED"
-      ? "text-grid-violet"
-      : status ===
-        "EXPIRED"
-      ? "text-amber-300"
-      : "text-red-400";
+        ? "text-grid-violet"
+        : status === "EXPIRED"
+          ? "text-amber-600"
+          : "text-grid-crimson";
 
   return (
     <span
-      className={`text-[10px] uppercase tracking-[0.3em] ${cls}`}
+      className={`text-[10px] uppercase tracking-[0.3em] font-medium ${cls}`}
     >
       {status}
     </span>
@@ -175,10 +142,10 @@ function TxBadge({
     type === "EARN"
       ? "▲"
       : type === "BONUS"
-      ? "★"
-      : type === "REDEEM"
-      ? "▼"
-      : "~";
+        ? "★"
+        : type === "REDEEM"
+          ? "▼"
+          : "~";
 
   return (
     <span className="text-[10px] uppercase tracking-[0.3em] text-grid-muted">
@@ -187,22 +154,15 @@ function TxBadge({
   );
 }
 
-function RankBadge({
-  rank,
-}: {
-  rank: number;
-}) {
-  const isTop3 =
-    rank >= 1 && rank <= 3;
-
+function RankBadge({ rank }: { rank: number }) {
   const badgeColor =
     rank === 1
-      ? "bg-amber-500/20 border-amber-500/30 text-amber-300"
+      ? "bg-amber-600/20 border-amber-600/30 text-amber-300"
       : rank === 2
-      ? "bg-slate-300/10 border-slate-300/20 text-slate-200"
-      : rank === 3
-      ? "bg-amber-600/10 border-amber-600/20 text-amber-200"
-      : "bg-white/5 border-white/10 text-white/60";
+        ? "bg-slate-400/10 border-slate-400/20 text-slate-200"
+        : rank === 3
+          ? "bg-amber-700/10 border-amber-700/20 text-amber-200"
+          : "bg-white/5 border-white/10 text-white/60";
 
   return (
     <span
@@ -213,56 +173,29 @@ function RankBadge({
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
+
 export function GridExperience() {
   const [dashboard, setDashboard] =
-    useState<GridDashboardData | null>(
-      null,
-    );
+    useState<GridDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [authRequired, setAuth] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [redeeming, setRedeeming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [credsInput, setCredsInput] = useState("1000");
+  const [showTx, setShowTx] = useState(false);
+  const [showAch, setShowAch] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
+  const [showOrders, setShowOrders] = useState(false);
+  const [showBoot, setShowBoot] = useState(false);
+  const [bootDone, setBootDone] = useState(false);
 
-  const [loading, setLoading] =
-    useState(true);
-
-  const [authRequired, setAuth] =
-    useState(false);
-
-  const [syncing, setSyncing] =
-    useState(false);
-
-  const [redeeming, setRedeeming] =
-    useState(false);
-
-  const [error, setError] =
-    useState<string | null>(
-      null,
-    );
-
-  const [credsInput, setCredsInput] =
-    useState("1000");
-
-  const [showTx, setShowTx] =
-    useState(false);
-
-  const [showAch, setShowAch] =
-    useState(false);
-
-  const [showActivity, setShowActivity] =
-    useState(false);
-
-  const [showOrders, setShowOrders] =
-    useState(false);
-
-  const [showBoot, setShowBoot] =
-    useState(false);
-
-  const [bootDone, setBootDone] =
-    useState(false);
-
+  /* BOOT SEQUENCE */
   useEffect(() => {
-    if (
-      !sessionStorage.getItem(
-        "grid_booted",
-      )
-    ) {
+    if (!sessionStorage.getItem("grid_booted")) {
       setShowBoot(true);
     } else {
       setBootDone(true);
@@ -270,27 +203,17 @@ export function GridExperience() {
   }, []);
 
   const onBoot = useCallback(() => {
-    sessionStorage.setItem(
-      "grid_booted",
-      "1",
-    );
-
+    sessionStorage.setItem("grid_booted", "1");
     setShowBoot(false);
     setBootDone(true);
   }, []);
 
   function login() {
     const ret =
-      typeof window !==
-      "undefined"
-        ? encodeURIComponent(
-            window.location.href,
-          )
+      typeof window !== "undefined"
+        ? encodeURIComponent(window.location.href)
         : "/";
-
-    window.location.assign(
-      `/api/auth/login?returnTo=${ret}`,
-    );
+    window.location.assign(`/api/auth/login?returnTo=${ret}`);
   }
 
   async function load() {
@@ -298,32 +221,22 @@ export function GridExperience() {
       setLoading(true);
       setError(null);
 
-      const d =
-        await gFetch<GridDashboardData>(
-          "/api/dashboard",
-        );
-
-      console.log(
-        "[GRID_DASHBOARD]",
-        d,
+      const d = await gFetch<GridDashboardData>(
+        "/api/dashboard",
       );
 
+      console.log("[GRID_DASHBOARD]", d);
       setDashboard(d);
       setAuth(false);
     } catch (e) {
       if (
-        (
-          e as Error & {
-            status?: number;
-          }
-        ).status === 401
+        (e as Error & { status?: number }).status === 401
       ) {
         setAuth(true);
         setDashboard(null);
       } else {
         setError(
-          (e as Error)
-            .message ??
+          (e as Error).message ??
             "Could not load dashboard.",
         );
       }
@@ -341,21 +254,14 @@ export function GridExperience() {
       setSyncing(true);
       setError(null);
 
-      const p =
-        await gFetch<{
-          dashboard: GridDashboardData;
-        }>("/api/sync", {
-          method: "POST",
-        });
+      const p = await gFetch<{
+        dashboard: GridDashboardData;
+      }>("/api/sync", { method: "POST" });
 
-      setDashboard(
-        p.dashboard,
-      );
+      setDashboard(p.dashboard);
     } catch (e) {
       setError(
-        (e as Error)
-          .message ??
-          "Sync failed.",
+        (e as Error).message ?? "Sync failed.",
       );
     } finally {
       setSyncing(false);
@@ -371,34 +277,26 @@ export function GridExperience() {
       setRedeeming(true);
       setError(null);
 
-      const idempotencyKey =
-        crypto.randomUUID();
+      const idempotencyKey = crypto.randomUUID();
 
-      const p =
-        await gFetch<{
-          coupon: GridCouponRecord;
-          dashboard: GridDashboardData;
-        }>("/api/redeem", {
-          method: "POST",
-          headers: {
-            "Idempotency-Key":
-              idempotencyKey,
-          },
-          body: JSON.stringify({
-            creds: Number(
-              credsInput,
-            ),
-            idempotencyKey,
-          }),
-        });
+      const p = await gFetch<{
+        coupon: GridCouponRecord;
+        dashboard: GridDashboardData;
+      }>("/api/redeem", {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: JSON.stringify({
+          creds: Number(credsInput),
+          idempotencyKey,
+        }),
+      });
 
-      setDashboard(
-        p.dashboard,
-      );
+      setDashboard(p.dashboard);
     } catch (e) {
       setError(
-        (e as Error)
-          .message ??
+        (e as Error).message ??
           "Redemption failed.",
       );
     } finally {
@@ -408,53 +306,39 @@ export function GridExperience() {
 
   async function handleLogout() {
     try {
-      await gFetch(
-        "/api/auth/logout",
-        {
-          method: "POST",
-        },
-      );
+      await gFetch("/api/auth/logout", {
+        method: "POST",
+      });
 
       setDashboard(null);
       setAuth(true);
     } catch (e) {
       setError(
-        (e as Error)
-          .message ??
+        (e as Error).message ??
           "Could not end session.",
       );
     }
   }
 
+  /* BOOT SEQUENCE */
   if (showBoot)
-    return (
-      <BootSequence
-        onComplete={onBoot}
-      />
-    );
+    return <BootSequence onComplete={onBoot} />;
 
   if (!bootDone) return null;
 
-  if (
-    loading &&
-    !dashboard
-  ) {
+  /* LOADING STATE */
+  if (loading && !dashboard) {
     return (
-  <main className="relative flex min-h-screen items-center justify-center overflow-x-hidden">
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
+        <div className="hidden md:block absolute inset-0">
+          <HologramScene />
+        </div>
 
-    <div className="hidden md:block">
-      <HologramScene />
-    </div>
-
-        <div className="panel-shell relative z-10 w-full max-w-md text-center">
-          <p className="panel-title">
-            INITIALIZING
-          </p>
-
-          <h1 className="mt-4 text-3xl uppercase tracking-[0.18em] text-white">
+        <div className="panel-shell relative z-10 w-full max-w-sm text-center">
+          <p className="panel-title">INITIALIZING</p>
+          <h1 className="mt-4 text-2xl md:text-3xl uppercase tracking-[0.18em] text-grid-text">
             THE GRID
           </h1>
-
           <div className="progress-track mx-auto mt-8 w-56">
             <div className="progress-fill w-full">
               <span className="progress-orb" />
@@ -465,27 +349,20 @@ export function GridExperience() {
     );
   }
 
-  if (
-    authRequired ||
-    !dashboard
-  ) {
+  /* AUTH REQUIRED */
+  if (authRequired || !dashboard) {
     return (
-  <main className="relative min-h-screen overflow-x-hidden overflow-y-auto touch-pan-y">
+      <main className="relative min-h-screen overflow-hidden px-4 py-16 flex items-center justify-center">
+        <div className="hidden md:block absolute inset-0">
+          <HologramScene />
+        </div>
 
-    <div className="hidden md:block">
-      <HologramScene />
-    </div>
-
-        <div className="relative z-10 flex min-h-screen items-center justify-center px-6 py-16">
-          <div className="panel-shell max-w-2xl">
-            <p className="panel-title">
-              SECURE AUTH SYSTEM
-            </p>
-
-            <h1 className="mt-4 text-5xl uppercase tracking-[0.16em] text-white">
+        <div className="relative z-10">
+          <div className="panel-shell max-w-2xl mx-auto">
+            <p className="panel-title">SECURE AUTH SYSTEM</p>
+            <h1 className="mt-4 text-3xl md:text-5xl uppercase tracking-[0.16em] text-grid-text">
               THE GRID
             </h1>
-
             <div className="mt-8 flex flex-wrap gap-3">
               <button
                 onClick={login}
@@ -502,45 +379,39 @@ export function GridExperience() {
 
   const d = dashboard;
 
-  const redeemPreview =
-  Number.isFinite(
+  const redeemPreview = Number.isFinite(
     Number(credsInput),
   )
     ? credsToRupees(
         Number(credsInput),
-        d.globalStats
-          ?.conversionRate ?? 100,
+        d.globalStats?.conversionRate ?? 100,
       )
     : 0;
 
+  /* MAIN DASHBOARD */
   return (
-  <main className="relative min-h-screen overflow-x-hidden overflow-y-auto touch-pan-y px-4 py-6 md:px-6 md:py-8">
+    <main className="relative min-h-screen overflow-x-hidden px-4 py-8 md:px-6 md:py-10">
+      {/* BACKGROUND - DESKTOP ONLY */}
+      <div className="hidden md:block absolute inset-0 -z-10">
+        <HologramScene />
+      </div>
 
-    <div className="hidden md:block">
-      <HologramScene />
-    </div>
-
-      <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6">
-
+      <div className="relative z-0 mx-auto flex max-w-6xl flex-col gap-8">
         {/* HEADER */}
-
         <motion.header
           {...fadeUp(0)}
-          className="panel-shell flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+          className="panel-shell flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
         >
-          <div>
+          <div className="flex-1">
             <p className="panel-title">
-              THE GRID —
-              LOYALTY OS
+              THE GRID — LOYALTY OS
             </p>
-
-            <h1 className="mt-2 text-3xl uppercase tracking-[0.18em] text-white md:text-5xl">
+            <h1 className="mt-3 text-2xl md:text-4xl uppercase tracking-[0.18em] text-grid-text">
               THE GRID
             </h1>
-
-            <p className="mt-2 text-[11px] uppercase tracking-[0.34em] text-grid-cyan/80">
+            <p className="mt-2 text-[11px] uppercase tracking-[0.34em] text-grid-gold/70">
               <TerminalText
-                text="THIS IS NOT FASHION. THIS IS A SYSTEM."
+                text="HYPER LUXURY TACTICAL OPERATING SYSTEM"
                 speed={28}
                 delay={200}
               />
@@ -549,18 +420,10 @@ export function GridExperience() {
 
           <div className="flex flex-wrap items-center gap-3">
             <span className="data-chip">
-              Sync:
-              {" "}
-              {
-                d.system
-                  .syncWindowLabel
-              }
+              Sync: {d.system.syncWindowLabel}
             </span>
-
             <button
-              onClick={
-                handleLogout
-              }
+              onClick={handleLogout}
               className="grid-button-ghost"
             >
               Exit Session
@@ -569,87 +432,59 @@ export function GridExperience() {
         </motion.header>
 
         {/* MAIN GRID */}
-
-        <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-
+        <section className="grid gap-8 lg:grid-cols-[1.2fr_1fr]">
           {/* LEFT COLUMN */}
-
-          <motion.div
-            {...fadeUp(0.08)}
-          >
-            <TiltCard intensity={6}>
+          <motion.div {...fadeUp(0.08)}>
+            {/* USER PANEL */}
+            <TiltCard intensity={4}>
               <div className="panel-shell">
-
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <p className="panel-title">
-                      USER PANEL
-                    </p>
-
-                    <h2 className="mt-3 text-3xl uppercase tracking-[0.16em] text-white">
-                      {
-                        d.member
-                          .username
-                      }
+                <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+                  <div className="flex-1">
+                    <p className="panel-title">USER PANEL</p>
+                    <h2 className="mt-3 text-2xl uppercase tracking-[0.16em] text-grid-text">
+                      {d.member.username}
                     </h2>
-
                     <p className="mt-2 text-sm text-grid-muted">
-                      {
-                        d.member
-                          .email
-                      }
+                      {d.member.email}
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-grid-cyan/20 bg-black/30 p-5">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-grid-cyan">
+                  <div className="rounded-lg border border-grid-border bg-grid-surface px-4 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-grid-gold">
                       LEVEL
                     </p>
-
-                    <p className="mt-2 text-lg uppercase tracking-[0.12em] text-white">
-                      {
-                        d.wallet
-                          .level
-                          .label
-                      }
+                    <p className="mt-2 text-lg uppercase tracking-[0.12em] text-grid-text">
+                      {d.wallet.level.label}
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-3xl border border-white/10 bg-black/30 p-6">
+                <div className="mt-8 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border border-grid-border bg-grid-surface p-6">
                     <p className="panel-title">
-                      AVAILABLE
-                      CREDS
+                      AVAILABLE CREDS
                     </p>
-
-                    <div className="mt-4 text-6xl font-bold text-white">
+                    <div className="mt-4 text-5xl md:text-6xl font-bold text-grid-text">
                       <AnimatedCounter
                         value={
-                          d.wallet
-                            .availableCreds
+                          d.wallet.availableCreds
                         }
                       />
                     </div>
-
                     <p className="mt-3 text-xs text-grid-muted">
-                      Lifetime
-                      {" "}
+                      Lifetime{" "}
                       {formatCompactNumber(
-                        d.wallet
-                          .lifetimeCreds,
+                        d.wallet.lifetimeCreds,
                       )}
                     </p>
                   </div>
 
                   <div className="grid gap-4">
-                    <div className="rounded-3xl border border-white/10 bg-black/30 p-5">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-5">
                       <p className="panel-title">
-                        PURCHASE
-                        VALUE
+                        PURCHASE VALUE
                       </p>
-
-                      <p className="mt-4 text-2xl font-semibold text-white">
+                      <p className="mt-3 text-2xl font-semibold text-grid-text">
                         {formatIndianCurrency(
                           d.wallet
                             .totalPurchaseValue,
@@ -657,17 +492,12 @@ export function GridExperience() {
                       </p>
                     </div>
 
-                    <div className="rounded-3xl border border-white/10 bg-black/30 p-5">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-5">
                       <p className="panel-title">
-                        BONUS
-                        CREDS
+                        BONUS CREDS
                       </p>
-
-                      <p className="mt-4 text-2xl font-semibold text-white">
-                        {
-                          d.wallet
-                            .bonusCreds
-                        }
+                      <p className="mt-3 text-2xl font-semibold text-grid-text">
+                        {d.wallet.bonusCreds}
                       </p>
                     </div>
                   </div>
@@ -676,177 +506,168 @@ export function GridExperience() {
             </TiltCard>
 
             {/* GLOBAL ANALYTICS */}
-
             <motion.div
               {...fadeUp(0.16)}
-              className="mt-6"
+              className="mt-8"
             >
-              <TiltCard intensity={5}>
+              <TiltCard intensity={3}>
                 <div className="panel-shell">
                   <p className="panel-title">
                     GLOBAL ANALYTICS
                   </p>
-
-                  <h2 className="mt-3 text-xl uppercase tracking-[0.16em] text-white">
+                  <h2 className="mt-3 text-lg uppercase tracking-[0.16em] text-grid-text">
                     System Telemetry
                   </h2>
 
-                  <div className="mt-6 grid gap-4 grid-cols-2 md:grid-cols-3">
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-cyan">
+                  <div className="mt-6 grid gap-3 grid-cols-2 md:grid-cols-3">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-gold">
                         Active Users
                       </p>
-
-                      <p className="mt-3 text-2xl font-semibold text-white">
+                      <p className="mt-3 text-xl md:text-2xl font-semibold text-grid-text">
                         <AnimatedCounter
                           value={
-  d.globalStats?.activeUsers ?? 0
-}
-                        />
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-cyan">
-                        Total Issued
-                      </p>
-
-                      <p className="mt-3 text-2xl font-semibold text-white">
-                        <AnimatedCounter
-                          value={
-
-  d.globalStats?.totalCredsIssued ?? 0
-
-}
-                        />
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-violet">
-                        Total Redeemed
-                      </p>
-
-                      <p className="mt-3 text-2xl font-semibold text-white">
-                        <AnimatedCounter
-                          value={
-                            d.globalStats?.totalCredsRedeemed ?? 0
+                            d.globalStats
+                              ?.activeUsers ?? 0
                           }
                         />
                       </p>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-amber-400">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-gold">
+                        Total Issued
+                      </p>
+                      <p className="mt-3 text-xl md:text-2xl font-semibold text-grid-text">
+                        <AnimatedCounter
+                          value={
+                            d.globalStats
+                              ?.totalCredsIssued ?? 0
+                          }
+                        />
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-violet">
+                        Total Redeemed
+                      </p>
+                      <p className="mt-3 text-xl md:text-2xl font-semibold text-grid-text">
+                        <AnimatedCounter
+                          value={
+                            d.globalStats
+                              ?.totalCredsRedeemed ?? 0
+                          }
+                        />
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-gold">
                         Total Savings
                       </p>
-
-                      <p className="mt-3 text-xl font-semibold text-white">
+                      <p className="mt-3 text-lg font-semibold text-grid-text">
                         {formatIndianCurrency(
-                          d.globalStats?.totalSavingsRupees ?? 0
+                          d.globalStats
+                            ?.totalSavingsRupees ?? 0
                         )}
                       </p>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-cyan">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-gold">
                         Coupons Issued
                       </p>
-
-                      <p className="mt-3 text-2xl font-semibold text-white">
+                      <p className="mt-3 text-xl md:text-2xl font-semibold text-grid-text">
                         <AnimatedCounter
                           value={
-                            d.globalStats?.totalCouponsIssued ?? 0
+                            d.globalStats
+                              ?.totalCouponsIssued ?? 0
                           }
                         />
                       </p>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
                       <p className="text-[10px] uppercase tracking-[0.3em] text-grid-violet">
                         Coupons Used
                       </p>
-
-                      <p className="mt-3 text-2xl font-semibold text-white">
+                      <p className="mt-3 text-xl md:text-2xl font-semibold text-grid-text">
                         <AnimatedCounter
                           value={
-  d.globalStats?.totalCouponsUsed ?? 0
-}
+                            d.globalStats
+                              ?.totalCouponsUsed ?? 0
+                          }
                         />
                       </p>
                     </div>
                   </div>
 
-                  {d.globalStats?.usersOnFraudHold && (
-  <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
-    <p className="text-[10px] uppercase tracking-[0.3em] text-red-400">
-      Fraud Hold
-    </p>
-
-    <p className="mt-2 text-lg font-semibold text-red-300">
-      <AnimatedCounter
-        value={d.globalStats?.usersOnFraudHold ?? 0}
-      />
-      {" "}
-      Users
-    </p>
-  </div>
-)}
+                  {d.globalStats
+                    ?.usersOnFraudHold && (
+                    <div className="mt-4 rounded-lg border border-grid-crimson/30 bg-grid-crimson/10 p-4">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-crimson">
+                        Fraud Hold
+                      </p>
+                      <p className="mt-2 text-lg font-semibold text-grid-crimson/90">
+                        <AnimatedCounter
+                          value={
+                            d.globalStats
+                              ?.usersOnFraudHold ?? 0
+                          }
+                        />
+                        {" "}Users
+                      </p>
+                    </div>
+                  )}
                 </div>
               </TiltCard>
             </motion.div>
 
-            {/* LIFETIME ANALYTICS */}
-
+            {/* LIFETIME STATS */}
             <motion.div
               {...fadeUp(0.24)}
-              className="mt-6"
+              className="mt-8"
             >
-              <TiltCard intensity={4}>
+              <TiltCard intensity={3}>
                 <div className="panel-shell">
                   <p className="panel-title">
                     LIFETIME STATS
                   </p>
-
-                  <div className="mt-5 grid gap-4 grid-cols-2 md:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-cyan">
+                  <div className="mt-5 grid gap-3 grid-cols-2">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-gold">
                         Active Coupons
                       </p>
-
-                      <p className="mt-3 text-2xl font-semibold text-white">
+                      <p className="mt-3 text-xl md:text-2xl font-semibold text-grid-text">
                         <AnimatedCounter
                           value={
                             d.lifetimeStats
-                              .totalCouponsActive ??
-                            0
+                              .totalCouponsActive ?? 0
                           }
                         />
                       </p>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-amber-300">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-amber-600">
                         Expired
                       </p>
-
-                      <p className="mt-3 text-2xl font-semibold text-white">
+                      <p className="mt-3 text-xl md:text-2xl font-semibold text-grid-text">
                         <AnimatedCounter
                           value={
                             d.lifetimeStats
-                              .totalCouponsExpired ??
-                            0
+                              .totalCouponsExpired ?? 0
                           }
                         />
                       </p>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
                       <p className="text-[10px] uppercase tracking-[0.3em] text-grid-violet">
                         Used
                       </p>
-
-                      <p className="mt-3 text-2xl font-semibold text-white">
+                      <p className="mt-3 text-xl md:text-2xl font-semibold text-grid-text">
                         <AnimatedCounter
                           value={
                             d.lifetimeStats
@@ -856,12 +677,11 @@ export function GridExperience() {
                       </p>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-amber-400">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-gold">
                         Total Savings
                       </p>
-
-                      <p className="mt-3 text-xl font-semibold text-white">
+                      <p className="mt-3 text-lg font-semibold text-grid-text">
                         {formatIndianCurrency(
                           d.lifetimeStats
                             .totalSavingsRupees ?? 0
@@ -875,51 +695,39 @@ export function GridExperience() {
           </motion.div>
 
           {/* RIGHT COLUMN */}
-
           <motion.div
             {...fadeUp(0.14)}
-            className="grid gap-6"
+            className="grid gap-8 auto-rows-max"
           >
-
-            {/* REDEEM */}
-
-            <TiltCard intensity={4}>
+            {/* REDEEM PANEL */}
+            <TiltCard intensity={3}>
               <div className="panel-shell">
                 <p className="panel-title">
                   REDEEM PANEL
                 </p>
-
-                <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
+                <h2 className="mt-2 text-lg uppercase tracking-[0.16em] text-grid-text">
                   Convert Creds
                 </h2>
 
                 <form
                   className="mt-6 space-y-4"
-                  onSubmit={
-                    handleRedeem
-                  }
+                  onSubmit={handleRedeem}
                 >
                   <input
                     className="grid-input"
                     inputMode="numeric"
-                    value={
-                      credsInput
-                    }
+                    value={credsInput}
                     onChange={(e) =>
-                      setCredsInput(
-                        e.target
-                          .value,
-                      )
+                      setCredsInput(e.target.value)
                     }
                     placeholder="1000"
                   />
 
-                  <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                  <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
                     <p className="panel-title">
                       OUTPUT
                     </p>
-
-                    <p className="mt-3 text-3xl font-bold text-white">
+                    <p className="mt-3 text-2xl md:text-3xl font-bold text-grid-text">
                       {formatIndianCurrency(
                         redeemPreview,
                       )}
@@ -928,9 +736,7 @@ export function GridExperience() {
 
                   <div className="flex gap-3">
                     <button
-                      disabled={
-                        redeeming
-                      }
+                      disabled={redeeming}
                       className="grid-button flex-1"
                     >
                       {redeeming
@@ -940,12 +746,8 @@ export function GridExperience() {
 
                     <button
                       type="button"
-                      disabled={
-                        syncing
-                      }
-                      onClick={
-                        handleSync
-                      }
+                      disabled={syncing}
+                      onClick={handleSync}
                       className="grid-button-ghost"
                     >
                       {syncing
@@ -958,284 +760,203 @@ export function GridExperience() {
             </TiltCard>
 
             {/* GLOBAL RANK */}
-
-            <TiltCard intensity={4}>
+            <TiltCard intensity={3}>
               <div className="panel-shell">
                 <p className="panel-title">
                   GLOBAL RANK
                 </p>
-
-                <h3 className="mt-2 text-lg uppercase tracking-[0.14em] text-white">
+                <h3 className="mt-2 text-base uppercase tracking-[0.14em] text-grid-text">
                   Elite Position
                 </h3>
 
                 <div className="mt-6 space-y-4">
                   <div className="flex items-end justify-between">
                     <div>
-                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-cyan">
+                      <p className="text-[10px] uppercase tracking-[0.3em] text-grid-gold">
                         Your Rank
                       </p>
-
-                      <p className="mt-3 text-4xl font-bold text-white">
-                        #{
-                          d.globalRank
-                            .rank ?? "—"
-                        }
+                      <p className="mt-3 text-3xl md:text-4xl font-bold text-grid-text">
+                        #{d.globalRank.rank ?? "—"}
                       </p>
                     </div>
-
                     <RankBadge
-                      rank={
-                        d.globalRank
-                          .rank ?? 0
-                      }
+                      rank={d.globalRank.rank ?? 0}
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-3">
                       <p className="text-[9px] uppercase tracking-[0.3em] text-grid-muted">
                         Movement
                       </p>
-
-                      <p className="mt-2 text-lg font-semibold text-white">
-                        {d.globalRank
-                          .movement &&
-                        d.globalRank
-                          .movement > 0
+                      <p className="mt-2 text-lg font-semibold text-grid-text">
+                        {d.globalRank.movement &&
+                        d.globalRank.movement > 0
                           ? `↑ ${d.globalRank.movement}`
                           : d.globalRank
                               .movement &&
                             d.globalRank
                               .movement < 0
-                          ? `↓ ${Math.abs(
-                              d
-                                .globalRank
-                                .movement,
-                            )}`
-                          : "→"}
+                            ? `↓ ${Math.abs(
+                                d
+                                  .globalRank
+                                  .movement,
+                              )}`
+                            : "→"}
                       </p>
                     </div>
 
-                    
-                  </div>
-
-                  <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-                    <p className="text-[9px] uppercase tracking-[0.3em] text-grid-muted">
-                      Total Members
-                    </p>
-
-                    <p className="mt-2 text-xl font-semibold text-white">
-                      <AnimatedCounter
-                        value={
-                          d.globalRank
-                            .total ?? 0
-                        }
-                      />
-                    </p>
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-3">
+                      <p className="text-[9px] uppercase tracking-[0.3em] text-grid-muted">
+                        Total Members
+                      </p>
+                      <p className="mt-2 text-lg font-semibold text-grid-text">
+                        <AnimatedCounter
+                          value={
+                            d.globalRank.total ?? 0
+                          }
+                        />
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             </TiltCard>
 
             {/* COUPONS */}
-
-            <TiltCard intensity={3}>
+            <TiltCard intensity={2}>
               <div className="panel-shell">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="panel-title">
-                      COUPON
-                      VAULT
+                      COUPON VAULT
                     </p>
-
-                    <h3 className="mt-2 text-lg uppercase tracking-[0.14em] text-white">
+                    <h3 className="mt-2 text-base uppercase tracking-[0.14em] text-grid-text">
                       Redeemed
                     </h3>
                   </div>
-
                   <span className="data-chip">
-                    {
-                      d.coupons
-                        .length
-                    }
-                    {" "}
-                    TOTAL
+                    {d.coupons.length} TOTAL
                   </span>
                 </div>
 
                 <div className="mt-5 space-y-3">
-                  {d.coupons
-                    .length ===
-                  0 ? (
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-grid-muted">
-                      No coupons
-                      generated yet.
+                  {d.coupons.length === 0 ? (
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4 text-sm text-grid-muted">
+                      No coupons generated yet.
                     </div>
                   ) : (
                     d.coupons
-                      .slice(
-                        0,
-                        5,
-                      )
-                      .map(
-                        (
-                          coupon,
-                        ) => (
-                          <div
-                            key={
-                              coupon.id
-                            }
-                            className="rounded-2xl border border-white/10 bg-black/30 p-4 transition-all hover:border-grid-cyan/30 hover:bg-black/40"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-sm font-medium uppercase tracking-[0.08em] text-white">
-                                  {
-                                    coupon.code
-                                  }
-                                </p>
-
-                                <p className="mt-1 text-xs text-grid-muted">
-                                  {fmtDate(
-                                    coupon.createdAt,
-                                  )}
-                                </p>
-                              </div>
-
-                              <div className="text-right">
-                                <p className="text-xl font-semibold text-white">
-                                  ₹
-                                  {
-                                    coupon.valueRupees
-                                  }
-                                </p>
-
-                                <CouponBadge
-                                  status={
-                                    coupon.status
-                                  }
-                                />
-                              </div>
+                      .slice(0, 5)
+                      .map((coupon) => (
+                        <div
+                          key={coupon.id}
+                          className="rounded-lg border border-grid-border bg-grid-surface p-4 transition-all hover:border-grid-gold/20 hover:bg-grid-bg-secondary"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium uppercase tracking-[0.08em] text-grid-text">
+                                {coupon.code}
+                              </p>
+                              <p className="mt-1 text-xs text-grid-muted">
+                                {fmtDate(
+                                  coupon.createdAt,
+                                )}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-semibold text-grid-text">
+                                ₹
+                                {coupon.valueRupees}
+                              </p>
+                              <CouponBadge
+                                status={coupon.status}
+                              />
                             </div>
                           </div>
-                        ),
-                      )
+                        </div>
+                      ))
                   )}
                 </div>
               </div>
             </TiltCard>
 
             {/* LEADERBOARD */}
-
-            <TiltCard intensity={3}>
+            <TiltCard intensity={2}>
               <div className="panel-shell">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="panel-title">
-                      GLOBAL
-                      LEADERBOARD
+                      GLOBAL LEADERBOARD
                     </p>
-
-                    <h3 className="mt-2 text-lg uppercase tracking-[0.14em] text-white">
+                    <h3 className="mt-2 text-base uppercase tracking-[0.14em] text-grid-text">
                       Top Earners
                     </h3>
                   </div>
-
-                  <span className="data-chip">
-                    TOP 5
-                  </span>
+                  <span className="data-chip">TOP 5</span>
                 </div>
 
                 <div className="mt-5 space-y-3">
                   {d.leaderboard
-                    .slice(
-                      0,
-                      5,
-                    )
-                    .map(
-                      (
-                        entry,
-                        index,
-                      ) => (
-                        <div
-                          key={
-                            entry.memberId
-                          }
-                          className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4 transition-all hover:border-grid-cyan/30"
-                        >
-                          <div className="flex items-center gap-3 flex-1">
-                            <RankBadge
-                              rank={index + 1}
-                            />
-
-                            <div>
-                              <p className="text-sm uppercase tracking-[0.08em] text-white">
-                                {
-                                  entry.username
-                                }
-                              </p>
-
-                              <p className="mt-1 text-xs text-grid-muted">
-                                {
-                                  entry.level
-                                }
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="text-right">
-                            <p className="text-xs text-grid-cyan">
-                              {formatCompactNumber(
-                                entry.lifetimeCreds,
-                              )}
+                    .slice(0, 5)
+                    .map((entry, index) => (
+                      <div
+                        key={entry.memberId}
+                        className="flex items-center justify-between rounded-lg border border-grid-border bg-grid-surface p-4 transition-all hover:border-grid-gold/20"
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <RankBadge
+                            rank={index + 1}
+                          />
+                          <div>
+                            <p className="text-sm uppercase tracking-[0.08em] text-grid-text">
+                              {entry.username}
                             </p>
-
                             <p className="mt-1 text-xs text-grid-muted">
-                              creds
+                              {entry.level}
                             </p>
                           </div>
                         </div>
-                      ),
-                    )}
+                        <div className="text-right">
+                          <p className="text-xs text-grid-gold">
+                            {formatCompactNumber(
+                              entry.lifetimeCreds,
+                            )}
+                          </p>
+                          <p className="mt-1 text-xs text-grid-muted">
+                            creds
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                 </div>
               </div>
             </TiltCard>
 
             {/* TRANSACTIONS */}
-
-            <TiltCard intensity={3}>
+            <TiltCard intensity={2}>
               <div className="panel-shell">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="panel-title">
                       ACTIVITY LOG
                     </p>
-
-                    <h3 className="mt-2 text-lg uppercase tracking-[0.14em] text-white">
+                    <h3 className="mt-2 text-base uppercase tracking-[0.14em] text-grid-text">
                       Transactions
                     </h3>
                   </div>
-
                   <button
                     type="button"
-                    onClick={() =>
-                      setShowTx(
-                        !showTx,
-                      )
-                    }
-                    className="data-chip cursor-pointer hover:text-grid-cyan transition-colors"
+                    onClick={() => setShowTx(!showTx)}
+                    className="data-chip cursor-pointer hover:text-grid-gold transition-colors"
                   >
-                    {showTx
-                      ? "COLLAPSE"
-                      : "EXPAND"}
+                    {showTx ? "COLLAPSE" : "EXPAND"}
                   </button>
                 </div>
 
                 <AnimatePresence>
                   {(showTx ||
-                    d
-                      .recentTransactions
+                    d.recentTransactions
                       .length <=
                       4) && (
                     <motion.div
@@ -1245,8 +966,7 @@ export function GridExperience() {
                       }}
                       animate={{
                         opacity: 1,
-                        height:
-                          "auto",
+                        height: "auto",
                       }}
                       exit={{
                         opacity: 0,
@@ -1257,57 +977,36 @@ export function GridExperience() {
                       {d.recentTransactions
                         .slice(
                           0,
-                          showTx
-                            ? 12
-                            : 4,
+                          showTx ? 12 : 4,
                         )
-                        .map(
-                          (
-                            tx,
-                          ) => (
-                            <div
-                              key={
-                                tx.id
-                              }
-                              className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4 transition-all hover:border-grid-cyan/30"
-                            >
-                              <div>
-                                <TxBadge
-                                  type={
-                                    tx.type
-                                  }
-                                />
-
-                                <p className="mt-2 text-sm text-white">
-                                  {tx.description ??
-                                    tx.source}
-                                </p>
-
-                                <p className="mt-1 text-xs text-grid-muted">
-                                  {fmtDate(
-                                    tx.createdAt,
-                                  )}
-                                </p>
-                              </div>
-
-                              <div className="text-right">
-                                <p className="text-lg font-semibold text-white">
-                                  {
-                                    tx.amount
-                                  }
-                                </p>
-
-                                <p className="text-xs text-grid-muted">
-                                  Balance:
-                                  {" "}
-                                  {
-                                    tx.balanceAfter
-                                  }
-                                </p>
-                              </div>
+                        .map((tx) => (
+                          <div
+                            key={tx.id}
+                            className="flex items-center justify-between rounded-lg border border-grid-border bg-grid-surface p-4 transition-all hover:border-grid-gold/20"
+                          >
+                            <div>
+                              <TxBadge type={tx.type} />
+                              <p className="mt-2 text-sm text-grid-text">
+                                {tx.description ??
+                                  tx.source}
+                              </p>
+                              <p className="mt-1 text-xs text-grid-muted">
+                                {fmtDate(
+                                  tx.createdAt,
+                                )}
+                              </p>
                             </div>
-                          ),
-                        )}
+                            <div className="text-right">
+                              <p className="text-lg font-semibold text-grid-text">
+                                {tx.amount}
+                              </p>
+                              <p className="text-xs text-grid-muted">
+                                Balance:{" "}
+                                {tx.balanceAfter}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -1315,33 +1014,25 @@ export function GridExperience() {
             </TiltCard>
 
             {/* ACHIEVEMENTS */}
-
             {d.achievements &&
-              d.achievements
-                .length > 0 && (
-                <TiltCard intensity={3}>
+              d.achievements.length > 0 && (
+                <TiltCard intensity={2}>
                   <div className="panel-shell">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="panel-title">
-                          ACHIEVEMENT
-                          MATRIX
+                          ACHIEVEMENT MATRIX
                         </p>
-
-                        <h3 className="mt-2 text-lg uppercase tracking-[0.14em] text-white">
-                          Unlocked
-                          Badges
+                        <h3 className="mt-2 text-base uppercase tracking-[0.14em] text-grid-text">
+                          Unlocked Badges
                         </h3>
                       </div>
-
                       <button
                         type="button"
                         onClick={() =>
-                          setShowAch(
-                            !showAch,
-                          )
+                          setShowAch(!showAch)
                         }
-                        className="data-chip cursor-pointer hover:text-grid-cyan transition-colors"
+                        className="data-chip cursor-pointer hover:text-grid-gold transition-colors"
                       >
                         {showAch
                           ? "COLLAPSE"
@@ -1361,8 +1052,7 @@ export function GridExperience() {
                           }}
                           animate={{
                             opacity: 1,
-                            height:
-                              "auto",
+                            height: "auto",
                           }}
                           exit={{
                             opacity: 0,
@@ -1377,51 +1067,37 @@ export function GridExperience() {
                                 ? undefined
                                 : 6,
                             )
-                            .map(
-                              (
-                                ach,
-                              ) => (
-                                <motion.div
-                                  key={
-                                    ach.key
-                                  }
-                                  initial={{
-                                    opacity:
-                                      0,
-                                    scale:
-                                      0.8,
-                                  }}
-                                  animate={{
-                                    opacity:
-                                      1,
-                                    scale: 1,
-                                  }}
-                                  transition={{
-                                    duration:
-                                      0.4,
-                                  }}
-                                  className="rounded-2xl border border-white/10 bg-black/30 p-3 text-center hover:border-grid-cyan/30 transition-all"
-                                >
-                                  <div className="text-2xl">
-                                    🏆
-                                  </div>
-
-                                  <p className="mt-2 text-xs uppercase tracking-[0.1em] text-white line-clamp-2">
-                                    {
-                                      ach.label
-                                    }
+                            .map((ach) => (
+                              <motion.div
+                                key={ach.key}
+                                initial={{
+                                  opacity: 0,
+                                  scale: 0.8,
+                                }}
+                                animate={{
+                                  opacity: 1,
+                                  scale: 1,
+                                }}
+                                transition={{
+                                  duration: 0.3,
+                                }}
+                                className="rounded-lg border border-grid-border bg-grid-surface p-3 text-center hover:border-grid-gold/20 transition-all"
+                              >
+                                <div className="text-2xl">
+                                  🏆
+                                </div>
+                                <p className="mt-2 text-xs uppercase tracking-[0.1em] text-grid-text line-clamp-2">
+                                  {ach.label}
+                                </p>
+                                {ach.unlockedAt && (
+                                  <p className="mt-1 text-[10px] text-grid-gold">
+                                    {fmtDate(
+                                      ach.unlockedAt,
+                                    )}
                                   </p>
-
-                                  {ach.unlockedAt && (
-                                    <p className="mt-1 text-[10px] text-grid-cyan">
-                                      {fmtDate(
-                                        ach.unlockedAt,
-                                      )}
-                                    </p>
-                                  )}
-                                </motion.div>
-                              ),
-                            )}
+                                )}
+                              </motion.div>
+                            ))}
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -1430,23 +1106,19 @@ export function GridExperience() {
               )}
 
             {/* ACTIVITY FEED */}
-
             {d.activityFeed &&
-              d.activityFeed
-                .length > 0 && (
-                <TiltCard intensity={3}>
+              d.activityFeed.length > 0 && (
+                <TiltCard intensity={2}>
                   <div className="panel-shell">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="panel-title">
                           LIVE ACTIVITY
                         </p>
-
-                        <h3 className="mt-2 text-lg uppercase tracking-[0.14em] text-white">
+                        <h3 className="mt-2 text-base uppercase tracking-[0.14em] text-grid-text">
                           System Feed
                         </h3>
                       </div>
-
                       <button
                         type="button"
                         onClick={() =>
@@ -1454,7 +1126,7 @@ export function GridExperience() {
                             !showActivity,
                           )
                         }
-                        className="data-chip cursor-pointer hover:text-grid-cyan transition-colors"
+                        className="data-chip cursor-pointer hover:text-grid-gold transition-colors"
                       >
                         {showActivity
                           ? "COLLAPSE"
@@ -1464,8 +1136,7 @@ export function GridExperience() {
 
                     <AnimatePresence>
                       {(showActivity ||
-                        d.activityFeed
-                          .length <=
+                        d.activityFeed.length <=
                           5) && (
                         <motion.div
                           initial={{
@@ -1474,8 +1145,7 @@ export function GridExperience() {
                           }}
                           animate={{
                             opacity: 1,
-                            height:
-                              "auto",
+                            height: "auto",
                           }}
                           exit={{
                             opacity: 0,
@@ -1490,52 +1160,38 @@ export function GridExperience() {
                                 ? 15
                                 : 5,
                             )
-                            .map(
-                              (
-                                activity,
-                                idx,
-                              ) => (
-                                <motion.div
-                                  key={
-                                    idx
-                                  }
-                                  initial={{
-                                    opacity:
-                                      0,
-                                    x: -10,
-                                  }}
-                                  animate={{
-                                    opacity:
-                                      1,
-                                    x: 0,
-                                  }}
-                                  transition={{
-                                    duration:
-                                      0.3,
-                                    delay:
-                                      idx *
-                                      0.05,
-                                  }}
-                                  className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/30 p-3 text-sm"
-                                >
-                                  <span className="mt-0.5 inline-block w-2 h-2 bg-grid-cyan rounded-full flex-shrink-0" />
-
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-white line-clamp-2">
-                                      {
-                                        activity.description
-                                      }
-                                    </p>
-
-                                    <p className="mt-1 text-xs text-grid-muted">
-                                      {fmtDate(
-                                        activity.createdAt,
-                                      )}
-                                    </p>
-                                  </div>
-                                </motion.div>
-                              ),
-                            )}
+                            .map((activity, idx) => (
+                              <motion.div
+                                key={idx}
+                                initial={{
+                                  opacity: 0,
+                                  x: -10,
+                                }}
+                                animate={{
+                                  opacity: 1,
+                                  x: 0,
+                                }}
+                                transition={{
+                                  duration: 0.3,
+                                  delay: idx * 0.04,
+                                }}
+                                className="flex items-start gap-3 rounded-lg border border-grid-border bg-grid-surface p-3 text-sm"
+                              >
+                                <span className="mt-0.5 inline-block w-2 h-2 bg-grid-gold rounded-full flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-grid-text line-clamp-2">
+                                    {
+                                      activity.description
+                                    }
+                                  </p>
+                                  <p className="mt-1 text-xs text-grid-muted">
+                                    {fmtDate(
+                                      activity.createdAt,
+                                    )}
+                                  </p>
+                                </div>
+                              </motion.div>
+                            ))}
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -1544,184 +1200,151 @@ export function GridExperience() {
               )}
 
             {/* ORDER HISTORY */}
-
-            {d.orders &&
-              d.orders.length >
-                0 && (
-                <TiltCard intensity={3}>
-                  <div className="panel-shell">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="panel-title">
-                          ORDER HISTORY
-                        </p>
-
-                        <h3 className="mt-2 text-lg uppercase tracking-[0.14em] text-white">
-                          Transactions
-                        </h3>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowOrders(
-                            !showOrders,
-                          )
-                        }
-                        className="data-chip cursor-pointer hover:text-grid-cyan transition-colors"
-                      >
-                        {showOrders
-                          ? "COLLAPSE"
-                          : "EXPAND"}
-                      </button>
+            {d.orders && d.orders.length > 0 && (
+              <TiltCard intensity={2}>
+                <div className="panel-shell">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="panel-title">
+                        ORDER HISTORY
+                      </p>
+                      <h3 className="mt-2 text-base uppercase tracking-[0.14em] text-grid-text">
+                        Transactions
+                      </h3>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowOrders(!showOrders)
+                      }
+                      className="data-chip cursor-pointer hover:text-grid-gold transition-colors"
+                    >
+                      {showOrders
+                        ? "COLLAPSE"
+                        : "EXPAND"}
+                    </button>
+                  </div>
 
-                    <AnimatePresence>
-                      {(showOrders ||
-                        d.orders
-                          .length <=
-                          4) && (
-                        <motion.div
-                          initial={{
-                            opacity: 0,
-                            height: 0,
-                          }}
-                          animate={{
-                            opacity: 1,
-                            height:
-                              "auto",
-                          }}
-                          exit={{
-                            opacity: 0,
-                            height: 0,
-                          }}
-                          className="mt-5 space-y-3 overflow-hidden"
-                        >
-                          {d.orders
-                            .slice(
-                              0,
-                              showOrders
-                                ? 12
-                                : 4,
-                            )
-                            .map(
-                              (order) => (
-                                <div
-                                  key={
-                                    order.id
-                                  }
-                                  className="rounded-2xl border border-white/10 bg-black/30 p-4 transition-all hover:border-grid-cyan/30"
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <div>
-                                      <p className="text-sm font-medium uppercase tracking-[0.08em] text-white">
-                                        Order{" "}
-                                        {
-                                          order.number
-                                        }
-                                      </p>
-
-                                      <p className="mt-1 text-xs text-grid-muted">
-                                        {fmtDate(
-                                          order.purchasedDate,
-                                        )}
-                                      </p>
-
-                                      {order.items && (
-                                        <p className="mt-2 text-xs text-grid-cyan">
-                                          {
-                                            order.items
-                                              .length
-                                          }{" "}
-                                          item
-                                          {order
-                                            .items
-                                            .length !==
-                                          1
-                                            ? "s"
-                                            : ""}
-                                        </p>
-                                      )}
-                                    </div>
-
-                                    <div className="text-right">
-                                      <p className="text-lg font-semibold text-white">
-                                        {formatIndianCurrency(
-                                          order.total,
-                                        )}
-                                      </p>
-
-                                      <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-grid-cyan">
-                                        {
-                                          order.status ??
-                                            "COMPLETED"
-                                        }
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  {order.couponCode && (
-                                    <div className="mt-3 rounded-lg border border-grid-cyan/20 bg-grid-cyan/5 p-2">
-                                      <p className="text-[10px] text-grid-cyan">
-                                        ✓ Coupon
-                                        Applied
-                                      </p>
-                                    </div>
+                  <AnimatePresence>
+                    {(showOrders ||
+                      d.orders.length <= 4) && (
+                      <motion.div
+                        initial={{
+                          opacity: 0,
+                          height: 0,
+                        }}
+                        animate={{
+                          opacity: 1,
+                          height: "auto",
+                        }}
+                        exit={{
+                          opacity: 0,
+                          height: 0,
+                        }}
+                        className="mt-5 space-y-3 overflow-hidden"
+                      >
+                        {d.orders
+                          .slice(
+                            0,
+                            showOrders ? 12 : 4,
+                          )
+                          .map((order) => (
+                            <div
+                              key={order.id}
+                              className="rounded-lg border border-grid-border bg-grid-surface p-4 transition-all hover:border-grid-gold/20"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <p className="text-sm font-medium uppercase tracking-[0.08em] text-grid-text">
+                                    Order{" "}
+                                    {order.number}
+                                  </p>
+                                  <p className="mt-1 text-xs text-grid-muted">
+                                    {fmtDate(
+                                      order.purchasedDate,
+                                    )}
+                                  </p>
+                                  {order.items && (
+                                    <p className="mt-2 text-xs text-grid-gold">
+                                      {
+                                        order.items
+                                          .length
+                                      }{" "}
+                                      item
+                                      {order
+                                        .items
+                                        .length !==
+                                      1
+                                        ? "s"
+                                        : ""}
+                                    </p>
                                   )}
                                 </div>
-                              ),
-                            )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </TiltCard>
-              )}
+                                <div className="text-right">
+                                  <p className="text-lg font-semibold text-grid-text">
+                                    {formatIndianCurrency(
+                                      order.total,
+                                    )}
+                                  </p>
+                                  <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-grid-gold">
+                                    {order.status ??
+                                      "COMPLETED"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {order.couponCode && (
+                                <div className="mt-3 rounded-lg border border-grid-gold/20 bg-grid-gold/5 p-2">
+                                  <p className="text-[10px] text-grid-gold">
+                                    ✓ Coupon
+                                    Applied
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </TiltCard>
+            )}
 
             {/* SYSTEM STATUS */}
-
-            <TiltCard intensity={3}>
+            <TiltCard intensity={2}>
               <div className="panel-shell">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="panel-title">
-                      SYSTEM
-                      STATUS
+                      SYSTEM STATUS
                     </p>
-
-                    <h3 className="mt-2 text-lg uppercase tracking-[0.14em] text-white">
-                      Ledger
-                      Online
+                    <h3 className="mt-2 text-base uppercase tracking-[0.14em] text-grid-text">
+                      Ledger Online
                     </h3>
                   </div>
-
                   <StatusDot
                     status={
                       syncing
                         ? "SYNCING"
-                        : d.system
-                            .connection
+                        : d.system.connection
                     }
                   />
                 </div>
 
                 <p className="mt-4 text-sm text-grid-muted">
-                  Last sync:
-                  {" "}
-                  {fmtDate(
-                    d.system
-                      .syncedAt,
-                  )}
+                  Last sync:{" "}
+                  {fmtDate(d.system.syncedAt)}
                 </p>
               </div>
             </TiltCard>
           </motion.div>
         </section>
 
+        {/* ERROR STATE */}
         {error && (
           <motion.div
             {...fadeUp(0)}
-            className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300"
+            className="rounded-lg border border-grid-crimson/30 bg-grid-crimson/10 p-4 text-sm text-grid-crimson/90"
           >
             {error}
           </motion.div>

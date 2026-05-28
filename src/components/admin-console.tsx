@@ -33,18 +33,13 @@ const HologramScene = dynamic(
     ),
   {
     ssr: false,
-    loading: () => (
-      <div
-        className="pointer-events-none fixed inset-0"
-        aria-hidden
-      />
-    ),
+    loading: () => null,
   },
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPES
-// ─────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
+   TYPES
+───────────────────────────────────────────────────────────────────────────── */
 
 interface OverviewPayload {
   admin: {
@@ -54,95 +49,69 @@ interface OverviewPayload {
   };
 
   globalStats: GlobalStats;
-
   users: GridUser[];
-
   flaggedUsers: GridUser[];
-
   redemptions: RedemptionRecord[];
-
   auditLogs: AuditLog[];
-
   adminActions: AdminAction[];
-
   syncJobs: SyncJob[];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
+   UTILITIES
+───────────────────────────────────────────────────────────────────────────── */
 
 async function gFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
 
-  const response =
-    await fetch(path, {
-      ...init,
-
-      credentials:
-        "include",
-
-      headers: {
-        ...(init?.body
-          ? {
-              "Content-Type":
-                "application/json",
-            }
-          : {}),
-
-        ...init?.headers,
-      },
-    });
+  const response = await fetch(path, {
+    ...init,
+    credentials: "include",
+    headers: {
+      ...(init?.body
+        ? { "Content-Type": "application/json" }
+        : {}),
+      ...init?.headers,
+    },
+  });
 
   if (!response.ok) {
 
-    const body =
-      await response
-        .json()
-        .catch(() => null) as {
-        error?: string;
-      } | null;
+    const body = (await response
+      .json()
+      .catch(() => null)) as {
+      error?: string;
+    } | null;
 
     throw new Error(
-      body?.error ??
-      `HTTP ${response.status}`,
+      body?.error ?? `HTTP ${response.status}`,
     );
   }
 
   return response.json() as Promise<T>;
 }
 
-function fmtDate(
-  value?: string | null,
-): string {
+function fmtDate(value?: string | null): string {
 
   if (!value) {
     return "—";
   }
 
-  return new Intl.DateTimeFormat(
-    "en-IN",
-    {
-      dateStyle:
-        "medium",
-
-      timeStyle:
-        "short",
-    },
-  ).format(
-    new Date(value),
-  );
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 function idempotencyKey(): string {
   return crypto.randomUUID();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UI
-// ─────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
+   STAT TILE COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
 
 function StatTile({
   label,
@@ -157,23 +126,16 @@ function StatTile({
       className="
         relative
         overflow-hidden
-        rounded-3xl
-        border border-white/10
-        bg-black/30
-        p-5
-        backdrop-blur-2xl
+        rounded-lg
+        border border-grid-border-strong
+        bg-grid-surface
+        p-6
         transition-all
-        duration-500
-        hover:border-cyan-400/30
-        hover:shadow-[0_0_40px_rgba(77,247,255,0.08)]
+        duration-300
+        hover:border-grid-gold/20
+        hover:bg-grid-bg-secondary
       "
     >
-
-      <div className="absolute inset-0 opacity-[0.05]">
-
-        <div className="absolute left-0 top-0 h-[180px] w-[180px] rounded-full bg-cyan-400 blur-[100px]" />
-
-      </div>
 
       <div className="relative z-10">
 
@@ -181,7 +143,7 @@ function StatTile({
           {label}
         </p>
 
-        <p className="mt-3 text-3xl font-semibold text-white">
+        <p className="mt-3 text-2xl md:text-3xl font-semibold text-grid-text">
 
           <AnimatedCounter
             value={value}
@@ -195,21 +157,17 @@ function StatTile({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────────────────────
+   MAIN COMPONENT
+───────────────────────────────────────────────────────────────────────────── */
 
 export function AdminConsole() {
 
   const [data, setData] =
-    useState<OverviewPayload | null>(
-      null,
-    );
+    useState<OverviewPayload | null>(null);
 
   const isOwner =
-  data?.admin.roles.includes(
-    "owner",
-  ) ?? false;
+    data?.admin.roles.includes("owner") ?? false;
 
   const [loading, setLoading] =
     useState(true);
@@ -243,262 +201,191 @@ export function AdminConsole() {
       "Manual operator adjustment",
     );
 
-  const [rankLevel, setRankLevel] =
-    useState<
-      GridTierKey | ""
-    >("");
-
-  const [status, setStatus] =
-    useState<
-      GridUser["status"]
-    >("ACTIVE");
-
   const [campaignAmount, setCampaignAmount] =
     useState("500");
 
   const [eventKey, setEventKey] =
     useState("SEASONAL_DROP");
 
-  const [campaignTarget, setCampaignTarget] =
-  useState("ALL_USERS");
-
-  const [conversionRate, setConversionRate] =
-  useState("100");
-
-const [campaignType, setCampaignType] =
-  useState<
-    "GLOBAL" |
-    "TIER" |
-    "EVENT"
-  >("GLOBAL");
+  const [campaignType, setCampaignType] =
+    useState<"GLOBAL" | "TIER" | "EVENT">(
+      "GLOBAL",
+    );
 
   const [orderId, setOrderId] =
     useState("");
 
-  const [orderAmount, setOrderAmount] =
-    useState("0");
+  const [conversionRate, setConversionRate] =
+    useState("100");
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // LOAD
-  // ───────────────────────────────────────────────────────────────────────────
+  /* LOAD DATA */
+  const load = useCallback(async () => {
 
-  const load =
-    useCallback(async () => {
+    try {
 
-      try {
+      setLoading(true);
+      setError(null);
 
-        setLoading(true);
-
-        setError(null);
-
-        const payload =
-          await gFetch<OverviewPayload>(
-            "/api/admin/overview",
-          );
-
-        setData(payload);
-
-        if (
-  payload.users.length > 0 &&
-  !payload.users.some(
-    (u) => u.memberId === memberId,
-  )
-) {
-  setMemberId(
-    payload.users[0].memberId,
-  );
-}
-
-      } catch (err) {
-
-        setError(
-          (err as Error).message,
+      const payload =
+        await gFetch<OverviewPayload>(
+          "/api/admin/overview",
         );
 
-      } finally {
+      setData(payload);
 
-        setLoading(false);
+      if (
+        payload.users.length > 0 &&
+        !payload.users.some(
+          (u) => u.memberId === memberId,
+        )
+      ) {
+        setMemberId(payload.users[0].memberId);
       }
 
-    }, [memberId]);
+    } catch (err) {
+
+      setError((err as Error).message);
+
+    } finally {
+
+      setLoading(false);
+    }
+
+  }, [memberId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // FILTERED USERS
-  // ───────────────────────────────────────────────────────────────────────────
+  /* FILTERED USERS */
+  const filteredUsers = useMemo(() => {
 
-  const filteredUsers =
-    useMemo(() => {
+    if (!data) {
+      return [];
+    }
 
-      if (!data) {
-        return [];
+    return data.users.filter((user) => {
+
+      const q = searchQuery
+        .trim()
+        .toLowerCase();
+
+      const matchesSearch =
+        q.length === 0 ||
+        user.username
+          .toLowerCase()
+          .includes(q) ||
+        user.email
+          .toLowerCase()
+          .includes(q) ||
+        user.memberId
+          .toLowerCase()
+          .includes(q);
+
+      let matchesFilter = true;
+
+      switch (userFilter) {
+
+        case "ACTIVE":
+          matchesFilter =
+            user.status === "ACTIVE";
+          break;
+
+        case "SUSPENDED":
+          matchesFilter =
+            user.status === "SUSPENDED";
+          break;
+
+        case "BANNED":
+          matchesFilter =
+            user.status === "BANNED";
+          break;
+
+        case "FRAUD":
+          matchesFilter =
+            user.fraudHold === true;
+          break;
+
+        default:
+          matchesFilter = true;
       }
 
-      return data.users.filter(
-        (user) => {
-
-          const q =
-            searchQuery
-              .trim()
-              .toLowerCase();
-
-          const matchesSearch =
-            q.length === 0 ||
-            user.username
-              .toLowerCase()
-              .includes(q) ||
-            user.email
-              .toLowerCase()
-              .includes(q) ||
-            user.memberId
-              .toLowerCase()
-              .includes(q);
-
-          let matchesFilter =
-            true;
-
-          switch (
-            userFilter
-          ) {
-
-            case "ACTIVE":
-              matchesFilter =
-                user.status ===
-                "ACTIVE";
-              break;
-
-            case "SUSPENDED":
-              matchesFilter =
-                user.status ===
-                "SUSPENDED";
-              break;
-
-            case "BANNED":
-              matchesFilter =
-                user.status ===
-                "BANNED";
-              break;
-
-            case "FRAUD":
-              matchesFilter =
-                user.fraudHold ===
-                true;
-              break;
-
-            default:
-              matchesFilter =
-                true;
-          }
-
-          return (
-            matchesSearch &&
-            matchesFilter
-          );
-        },
+      return (
+        matchesSearch && matchesFilter
       );
+    });
 
-    }, [
-      data,
-      searchQuery,
-      userFilter,
-    ]);
+  }, [
+    data,
+    searchQuery,
+    userFilter,
+  ]);
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // SELECTED USER
-  // ───────────────────────────────────────────────────────────────────────────
+  /* SELECTED USER */
+  const selectedUser = useMemo(
+    () =>
+      data?.users.find(
+        (user) =>
+          user.memberId === memberId,
+      ) ?? null,
 
-  const selectedUser =
-    useMemo(
-      () =>
-        data?.users.find(
-          (user) =>
-            user.memberId ===
-            memberId,
-        ) ?? null,
+    [data?.users, memberId],
+  );
 
-      [data?.users, memberId],
-    );
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // MUTATION
-  // ───────────────────────────────────────────────────────────────────────────
-
+  /* MUTATION HANDLER */
   async function mutate(
     path: string,
-    body: Record<
-      string,
-      unknown
-    >,
+    body: Record<string, unknown>,
   ) {
 
     try {
 
       setError(null);
-
       setMessage(null);
 
-      const key =
-        idempotencyKey();
+      const key = idempotencyKey();
 
-      await gFetch(
-        path,
-        {
-          method:
-            "POST",
-
-          headers: {
-            "Idempotency-Key":
-              key,
-          },
-
-          body:
-            JSON.stringify({
-              ...body,
-              idempotencyKey:
-                key,
-            }),
+      await gFetch(path, {
+        method: "POST",
+        headers: {
+          "Idempotency-Key": key,
         },
-      );
+        body: JSON.stringify({
+          ...body,
+          idempotencyKey: key,
+        }),
+      });
 
       setMessage(
-        "Mutation accepted and recorded.",
+        "Action executed and recorded.",
       );
 
       await load();
 
     } catch (err) {
 
-      setError(
-        (err as Error).message,
-      );
+      setError((err as Error).message);
     }
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // LOADING
-  // ───────────────────────────────────────────────────────────────────────────
-
-  if (
-    loading &&
-    !data
-  ) {
+  /* LOADING STATE */
+  if (loading && !data) {
 
     return (
-      <main className="relative flex min-h-screen items-center justify-center px-6">
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
 
-        <HologramScene />
+        <div className="hidden md:block absolute inset-0 -z-10">
+          <HologramScene />
+        </div>
 
-        <div className="panel-shell z-10 w-full max-w-sm text-center">
+        <div className="panel-shell relative z-10 w-full max-w-sm text-center">
 
           <p className="panel-title">
-            ADMIN
+            ADMIN CONSOLE
           </p>
 
-          <h1 className="mt-3 text-2xl uppercase tracking-[0.18em] text-white">
-            CONTROL PANEL
+          <h1 className="mt-3 text-2xl md:text-3xl uppercase tracking-[0.18em] text-grid-text">
+            LOADING CONTROL PANEL
           </h1>
 
         </div>
@@ -507,59 +394,27 @@ const [campaignType, setCampaignType] =
     );
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ───────────────────────────────────────────────────────────────────────────
-
+  /* MAIN RENDER */
   return (
-    <main className="relative min-h-screen overflow-x-hidden overflow-y-auto touch-pan-y px-4 py-6 md:px-6 md:py-8">
+    <main className="relative min-h-screen overflow-x-hidden px-4 py-8 md:px-6 md:py-10">
 
-      <HologramScene />
-
-      {/* CYBER GRID ATMOSPHERE */}
-
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-
-        <div className="absolute inset-0 bg-[#04050a]" />
-
-        <div className="absolute left-[-10%] top-[5%] h-[600px] w-[600px] rounded-full bg-cyan-400/10 blur-[180px] animate-nebulaFloat" />
-
-        <div className="absolute right-[-10%] top-[20%] h-[520px] w-[520px] rounded-full bg-violet-500/10 blur-[180px] animate-nebulaFloatSlow" />
-
-        <div className="absolute bottom-[-10%] left-[30%] h-[520px] w-[520px] rounded-full bg-fuchsia-500/10 blur-[200px] animate-nebulaFloat" />
-
-        <div
-          className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage: `
-              linear-gradient(rgba(77,247,255,0.10) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(77,247,255,0.10) 1px, transparent 1px)
-            `,
-            backgroundSize: "80px 80px",
-          }}
-        />
-
+      {/* BACKGROUND - DESKTOP ONLY */}
+      <div className="hidden md:block absolute inset-0 -z-10">
+        <HologramScene />
       </div>
 
-      <div className="relative z-10 mx-auto flex max-w-7xl flex-col gap-6">
+      <div className="relative z-0 mx-auto flex max-w-7xl flex-col gap-8">
 
         {/* HEADER */}
+        <header className="panel-shell flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 
-        <header className="panel-shell relative overflow-hidden flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
-          <div className="absolute inset-0 opacity-[0.06]">
-
-            <div className="absolute inset-y-0 left-0 w-[40%] bg-gradient-to-r from-cyan-400/20 to-transparent blur-3xl" />
-
-          </div>
-
-          <div className="relative z-10">
+          <div className="flex-1">
 
             <p className="panel-title">
               THE GRID — OWNER CONSOLE
             </p>
 
-            <h1 className="glitch-text mt-2 break-words text-2xl uppercase tracking-[0.12em] text-white sm:text-3xl md:text-5xl">
+            <h1 className="mt-2 text-2xl md:text-4xl uppercase tracking-[0.12em] text-grid-text">
               ADMIN
             </h1>
 
@@ -597,7 +452,7 @@ const [campaignType, setCampaignType] =
 
           </div>
 
-          <div className="relative z-10 flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
 
             <a
               href="/"
@@ -617,14 +472,17 @@ const [campaignType, setCampaignType] =
 
         </header>
 
+        {/* STATUS MESSAGES */}
         {(error || message) && (
 
           <div
-            className={`rounded-2xl border px-4 py-3 text-sm ${
-              error
-                ? "border-red-400/25 bg-red-500/10 text-red-100"
-                : "border-grid-cyan/25 bg-grid-cyan/8 text-grid-cyan"
-            }`}
+            className={`
+              rounded-lg border px-4 py-3 text-sm ${
+                error
+                  ? "border-grid-crimson/30 bg-grid-crimson/10 text-grid-crimson/90"
+                  : "border-grid-gold/25 bg-grid-gold/8 text-grid-gold"
+              }
+            `}
           >
 
             {error ?? message}
@@ -635,9 +493,8 @@ const [campaignType, setCampaignType] =
         {data && (
           <>
 
-            {/* STATS */}
-
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {/* STATS GRID */}
+            <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 
               <StatTile
                 label="ACTIVE USERS"
@@ -645,28 +502,32 @@ const [campaignType, setCampaignType] =
               />
 
               <StatTile
-                label="CRED ISSUED"
-                value={data.globalStats.totalCredsIssued}
+                label="CREDS ISSUED"
+                value={
+                  data.globalStats.totalCredsIssued
+                }
               />
 
               <StatTile
                 label="REDEEMED"
-                value={data.globalStats.totalCredsRedeemed}
+                value={
+                  data.globalStats.totalCredsRedeemed
+                }
               />
 
               <StatTile
-                label="TOTAL SAVINGS"
-                value={data.globalStats.totalSavingsRupees}
+                label="TOTAL SAVINGS (₹)"
+                value={
+                  data.globalStats.totalSavingsRupees
+                }
               />
 
             </section>
 
-            {/* USER REGISTRY */}
+            {/* USER MANAGEMENT */}
+            <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
 
-            <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-
-              {/* USERS */}
-
+              {/* USERS TABLE */}
               <div className="panel-shell overflow-hidden">
 
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -677,7 +538,7 @@ const [campaignType, setCampaignType] =
                       USER MODERATION
                     </p>
 
-                    <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
+                    <h2 className="mt-2 text-lg uppercase tracking-[0.16em] text-grid-text">
                       Member Registry
                     </h2>
 
@@ -692,18 +553,16 @@ const [campaignType, setCampaignType] =
                 <div className="mt-5 flex flex-col gap-3 md:flex-row">
 
                   <input
-                    className="grid-input"
+                    className="grid-input flex-1"
                     placeholder="Search username, email or member ID..."
                     value={searchQuery}
                     onChange={(e) =>
-                      setSearchQuery(
-                        e.target.value,
-                      )
+                      setSearchQuery(e.target.value)
                     }
                   />
 
                   <select
-                    className="grid-input md:max-w-[220px]"
+                    className="grid-input md:w-48"
                     value={userFilter}
                     onChange={(e) =>
                       setUserFilter(
@@ -742,22 +601,11 @@ const [campaignType, setCampaignType] =
                 </div>
 
                 {/* TABLE */}
-
-                <div
-                  className="
-                    mt-5
-                    overflow-x-auto
-                    rounded-3xl
-                    border
-                    border-white/10
-                    bg-black/20
-                    backdrop-blur-xl
-                  "
-                >
+                <div className="mt-5 overflow-x-auto rounded-lg border border-grid-border bg-grid-surface">
 
                   <table className="w-full min-w-[760px] text-left text-xs">
 
-                    <thead className="text-[10px] uppercase tracking-[0.24em] text-grid-muted">
+                    <thead className="text-[10px] uppercase tracking-[0.24em] text-grid-muted border-b border-grid-border">
 
                       <tr>
 
@@ -765,19 +613,19 @@ const [campaignType, setCampaignType] =
                           User
                         </th>
 
-                        <th className="pb-3">
+                        <th className="pb-3 px-4">
                           Balance
                         </th>
 
-                        <th className="pb-3">
+                        <th className="pb-3 px-4">
                           Tier
                         </th>
 
-                        <th className="pb-3">
+                        <th className="pb-3 px-4">
                           Status
                         </th>
 
-                        <th className="pb-3">
+                        <th className="pb-3 px-4">
                           Risk
                         </th>
 
@@ -785,19 +633,25 @@ const [campaignType, setCampaignType] =
 
                     </thead>
 
-                    <tbody className="divide-y divide-white/10">
+                    <tbody className="divide-y divide-grid-border">
 
                       {filteredUsers.map(
                         (user) => (
 
                           <tr
                             key={user.memberId}
-                            className={`cursor-pointer transition-all duration-300 hover:bg-cyan-400/5 hover:shadow-[inset_0_0_20px_rgba(77,247,255,0.06)] ${
-                              memberId ===
-                              user.memberId
-                                ? "bg-grid-cyan/8"
-                                : ""
-                            }`}
+                            className={`
+                              cursor-pointer
+                              transition-all
+                              duration-200
+                              hover:bg-grid-bg-secondary
+                              ${
+                                memberId ===
+                                user.memberId
+                                  ? "bg-grid-gold/8"
+                                  : ""
+                              }
+                            `}
                             onClick={() =>
                               setMemberId(
                                 user.memberId,
@@ -807,7 +661,7 @@ const [campaignType, setCampaignType] =
 
                             <td className="py-4 px-4">
 
-                              <p className="font-semibold text-white">
+                              <p className="font-semibold text-grid-text">
                                 {user.username}
                               </p>
 
@@ -817,7 +671,7 @@ const [campaignType, setCampaignType] =
 
                             </td>
 
-                            <td className="py-4 text-white">
+                            <td className="py-4 px-4 text-grid-text">
 
                               {user.availableCreds.toLocaleString(
                                 "en-IN",
@@ -826,28 +680,30 @@ const [campaignType, setCampaignType] =
 
                             </td>
 
-                            <td className="py-4 text-grid-cyan">
+                            <td className="py-4 px-4 text-grid-gold">
 
                               {user.rankOverride ??
                                 user.level}
 
                             </td>
 
-                            <td className="py-4 text-grid-muted">
+                            <td className="py-4 px-4 text-grid-muted">
 
                               {user.status}
 
                             </td>
 
-                            <td className="py-4">
+                            <td className="py-4 px-4">
 
                               <span
                                 className={
-                                  (user.fraudScore ?? 0) > 70
-                                    ? "text-red-300"
-                                    : (user.fraudScore ?? 0) > 40
-                                    ? "text-amber-300"
-                                    : "text-emerald-300"
+                                  (user.fraudScore ??
+                                    0) > 70
+                                    ? "text-grid-crimson font-semibold"
+                                    : (user.fraudScore ??
+                                        0) > 40
+                                      ? "text-amber-600"
+                                      : "text-grid-green"
                                 }
                               >
                                 {user.fraudScore ?? 0}
@@ -868,303 +724,279 @@ const [campaignType, setCampaignType] =
               </div>
 
               {/* OPERATOR PANEL */}
+              <div className="panel-shell">
 
-              <div className="panel-shell relative overflow-hidden">
+                <p className="panel-title">
+                  OPERATOR ACTIONS
+                </p>
 
-                <div className="absolute inset-0 opacity-[0.05]">
+                <h2 className="mt-2 text-lg uppercase tracking-[0.16em] text-grid-text">
+                  Controls
+                </h2>
 
-                  <div className="absolute right-0 top-0 h-[220px] w-[220px] rounded-full bg-violet-500 blur-[120px]" />
+                <div className="mt-6 space-y-4">
 
-                </div>
+                  <label className="block">
 
-                <div className="relative z-10">
+                    <span className="mb-2 block text-[10px] uppercase tracking-[0.28em] text-grid-muted">
+                      Member ID
+                    </span>
 
-                  <p className="panel-title">
-                    OPERATOR ACTIONS
-                  </p>
+                    <input
+                      className="grid-input"
+                      value={memberId}
+                      onChange={(e) =>
+                        setMemberId(e.target.value)
+                      }
+                    />
 
-                  <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
-                    Controls
-                  </h2>
+                  </label>
 
-                  <div className="mt-5 space-y-4">
+                  {selectedUser && (
 
-                    <label className="block">
+                    <div className="rounded-lg border border-grid-border bg-grid-surface p-4 text-xs text-grid-muted">
 
-                      <span className="mb-2 block text-[10px] uppercase tracking-[0.28em] text-grid-muted">
-                        Member ID
-                      </span>
+                      <p className="font-semibold text-grid-text">
+                        {selectedUser.username}
+                      </p>
 
-                      <input
-                        className="grid-input"
-                        value={memberId}
-                        onChange={(e) =>
-                          setMemberId(
-                            e.target.value,
-                          )
-                        }
-                      />
+                      <p>
 
-                    </label>
+                        {selectedUser.availableCreds.toLocaleString(
+                          "en-IN",
+                        )}{" "}
+                        C ·{" "}
+                        {selectedUser.status}
 
-                    {selectedUser && (
-
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-xs text-grid-muted">
-
-                        <p className="font-semibold text-white">
-                          {selectedUser.username}
-                        </p>
-
-                        <p>
-
-                          {selectedUser.availableCreds.toLocaleString(
-                            "en-IN",
-                          )}{" "}
-                          C ·{" "}
-                          {selectedUser.status}
-
-                        </p>
-
-                      </div>
-                    )}
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-
-                      <input
-                        className="grid-input"
-                        value={amount}
-                        onChange={(e) =>
-                          setAmount(
-                            e.target.value,
-                          )
-                        }
-                        placeholder="Cred amount"
-                      />
-
-                      <input
-                        className="grid-input"
-                        value={reason}
-                        onChange={(e) =>
-                          setReason(
-                            e.target.value,
-                          )
-                        }
-                        placeholder="Reason"
-                      />
+                      </p>
 
                     </div>
+                  )}
 
-                    <button
-                      className="grid-button w-full"
-                      onClick={() =>
-                        mutate(
-                          `/api/admin/users/${memberId}/adjust`,
-                          {
-                            amount:
-                              Number(amount),
+                  <div className="grid gap-3 sm:grid-cols-2">
 
-                            reason,
-                          },
-                        )
+                    <input
+                      className="grid-input"
+                      value={amount}
+                      onChange={(e) =>
+                        setAmount(e.target.value)
                       }
-                    >
+                      placeholder="Cred amount"
+                      inputMode="numeric"
+                    />
 
-                      Adjust Creds
-
-                    </button>
+                    <input
+                      className="grid-input"
+                      value={reason}
+                      onChange={(e) =>
+                        setReason(e.target.value)
+                      }
+                      placeholder="Reason"
+                    />
 
                   </div>
+
+                  <button
+                    className="grid-button w-full"
+                    onClick={() =>
+                      mutate(
+                        `/api/admin/users/${memberId}/adjust`,
+                        {
+                          amount:
+                            Number(amount),
+                          reason,
+                        },
+                      )
+                    }
+                  >
+
+                    Adjust Creds
+
+                  </button>
 
                 </div>
 
               </div>
 
             </section>
-<section className="panel-shell">
 
-  <div className="flex items-center justify-between">
+            {/* CAMPAIGN ENGINE */}
+            <section className="panel-shell">
 
-    <div>
+              <div className="flex items-center justify-between">
 
-      <p className="panel-title">
-        CAMPAIGN ENGINE
-      </p>
+                <div>
 
-      <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
-        Bonus Distribution
-      </h2>
+                  <p className="panel-title">
+                    CAMPAIGN ENGINE
+                  </p>
 
-    </div>
+                  <h2 className="mt-2 text-lg uppercase tracking-[0.16em] text-grid-text">
+                    Bonus Distribution
+                  </h2>
 
-    <span className="data-chip">
-      LIVE
-    </span>
+                </div>
 
-  </div>
+                <span className="data-chip">
+                  LIVE
+                </span>
 
-  <div className="mt-6 grid gap-4 md:grid-cols-2">
+              </div>
 
-    <input
-      className="grid-input"
-      placeholder="Campaign amount"
-      value={campaignAmount}
-      onChange={(e) =>
-        setCampaignAmount(
-          e.target.value,
-        )
-      }
-    />
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
 
-    <select
-      className="grid-input"
-      value={campaignType}
-      onChange={(e) =>
-        setCampaignType(
-          e.target.value as
-            | "GLOBAL"
-            | "TIER"
-            | "EVENT",
-        )
-      }
-    >
+                <input
+                  className="grid-input"
+                  placeholder="Campaign amount"
+                  value={campaignAmount}
+                  onChange={(e) =>
+                    setCampaignAmount(
+                      e.target.value,
+                    )
+                  }
+                  inputMode="numeric"
+                />
 
-      <option value="GLOBAL">
-        GLOBAL
-      </option>
+                <select
+                  className="grid-input"
+                  value={campaignType}
+                  onChange={(e) =>
+                    setCampaignType(
+                      e.target.value as
+                        | "GLOBAL"
+                        | "TIER"
+                        | "EVENT",
+                    )
+                  }
+                >
 
-      <option value="TIER">
-        TIER
-      </option>
+                  <option value="GLOBAL">
+                    GLOBAL
+                  </option>
 
-      <option value="EVENT">
-        EVENT
-      </option>
+                  <option value="TIER">
+                    TIER
+                  </option>
 
-    </select>
+                  <option value="EVENT">
+                    EVENT
+                  </option>
 
-    <input
-      className="grid-input md:col-span-2"
-      placeholder="Event Key / Campaign Reason"
-      value={eventKey}
-      onChange={(e) =>
-        setEventKey(
-          e.target.value,
-        )
-      }
-    />
+                </select>
 
-  </div>
+                <input
+                  className="grid-input md:col-span-2"
+                  placeholder="Event Key / Campaign Reason"
+                  value={eventKey}
+                  onChange={(e) =>
+                    setEventKey(e.target.value)
+                  }
+                />
 
-  <button
-    className="grid-button mt-5 w-full"
-    onClick={() =>
-      mutate(
-        "/api/admin/campaigns/bonus",
-        {
-          amount:
-            Number(
-              campaignAmount,
-            ),
+              </div>
 
-          reason:
-            eventKey,
+              <button
+                className="grid-button w-full mt-5"
+                onClick={() =>
+                  mutate(
+                    "/api/admin/campaigns/bonus",
+                    {
+                      amount:
+                        Number(campaignAmount),
+                      reason: eventKey,
+                      campaignType,
+                    },
+                  )
+                }
+              >
 
-          campaignType,
-        },
-      )
-    }
-  >
+                Launch Campaign
 
-    Launch Campaign
+              </button>
 
-  </button>
+            </section>
 
-</section>
+            {/* ECONOMY CONTROL */}
+            {isOwner && (
 
-{/* ECONOMY CONTROL */}
+              <section className="panel-shell">
 
-{data.admin.roles.includes("owner") && (
+                <div className="flex items-center justify-between">
 
-  <section className="panel-shell">
+                  <div>
 
-    <div className="flex items-center justify-between">
+                    <p className="panel-title">
+                      ECONOMY CONTROL
+                    </p>
 
-      <div>
+                    <h2 className="mt-2 text-lg uppercase tracking-[0.16em] text-grid-text">
+                      Cred Conversion Engine
+                    </h2>
 
-        <p className="panel-title">
-          ECONOMY CONTROL
-        </p>
+                  </div>
 
-        <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
-          Cred Conversion Engine
-        </h2>
+                  <span className="data-chip">
+                    OWNER ONLY
+                  </span>
 
-      </div>
+                </div>
 
-      <span className="data-chip">
-        OWNER ONLY
-      </span>
+                <div className="mt-6 grid gap-4 md:grid-cols-2">
 
-    </div>
+                  <div>
 
-    <div className="mt-6 grid gap-4 md:grid-cols-2">
+                    <p className="mb-2 text-[10px] uppercase tracking-[0.28em] text-grid-muted">
+                      Creds Required For ₹1
+                    </p>
 
-      <div>
+                    <input
+                      className="grid-input"
+                      value={conversionRate}
+                      onChange={(e) =>
+                        setConversionRate(
+                          e.target.value,
+                        )
+                      }
+                      placeholder="100"
+                      inputMode="numeric"
+                    />
 
-        <p className="mb-2 text-[10px] uppercase tracking-[0.28em] text-grid-muted">
-          Creds Required For ₹1
-        </p>
+                  </div>
 
-        <input
-          className="grid-input"
-          value={conversionRate}
-          onChange={(e) =>
-            setConversionRate(
-              e.target.value,
-            )
-          }
-          placeholder="100"
-        />
+                  <div className="rounded-lg border border-grid-border bg-grid-surface p-4">
 
-      </div>
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-grid-muted">
+                      Preview
+                    </p>
 
-      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <p className="mt-3 text-lg text-grid-text">
+                      {conversionRate} Creds = ₹1
+                    </p>
 
-        <p className="text-[10px] uppercase tracking-[0.24em] text-grid-muted">
-          Preview
-        </p>
+                  </div>
 
-        <p className="mt-3 text-lg text-white">
-          {conversionRate} Creds = ₹1
-        </p>
+                </div>
 
-      </div>
+                <button
+                  className="grid-button w-full mt-5"
+                  onClick={() =>
+                    mutate(
+                      "/api/admin/economy",
+                      {
+                        conversionRate:
+                          Number(conversionRate),
+                      },
+                    )
+                  }
+                >
+                  Update Economy
+                </button>
 
-    </div>
+              </section>
 
-    <button
-  className="grid-button mt-5 w-full"
-  onClick={() =>
-    mutate(
-      "/api/admin/economy",
-      {
-        conversionRate:
-          Number(
-            conversionRate,
-          ),
-      },
-    )
-  }
->
-  Update Economy
-</button>
+            )}
 
-  </section>
-
-)}
-
-            {/* LIVE SYSTEM FEED */}
-
+            {/* AUDIT LOG */}
             <section className="panel-shell">
 
               <div className="flex items-center justify-between">
@@ -1175,7 +1007,7 @@ const [campaignType, setCampaignType] =
                     LIVE SYSTEM FEED
                   </p>
 
-                  <h2 className="mt-2 text-xl uppercase tracking-[0.16em] text-white">
+                  <h2 className="mt-2 text-lg uppercase tracking-[0.16em] text-grid-text">
                     Runtime Activity
                   </h2>
 
@@ -1199,18 +1031,20 @@ const [campaignType, setCampaignType] =
                         flex
                         items-center
                         justify-between
-                        rounded-2xl
+                        rounded-lg
                         border
-                        border-white/10
-                        bg-black/20
+                        border-grid-border
+                        bg-grid-surface
                         px-4
                         py-3
+                        transition-all
+                        hover:border-grid-gold/20
                       "
                     >
 
                       <div>
 
-                        <p className="text-sm text-white">
+                        <p className="text-sm text-grid-text font-medium">
                           {log.action}
                         </p>
 
@@ -1220,7 +1054,7 @@ const [campaignType, setCampaignType] =
 
                       </div>
 
-                      <span className="text-[10px] uppercase tracking-[0.24em] text-grid-cyan">
+                      <span className="text-[10px] uppercase tracking-[0.24em] text-grid-gold font-medium">
                         {log.severity}
                       </span>
 

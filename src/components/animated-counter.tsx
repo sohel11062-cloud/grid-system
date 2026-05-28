@@ -8,191 +8,122 @@ import {
 
 interface Props {
   value: number;
-
   duration?: number;
-
-  formatter?: (
-    v: number,
-  ) => string;
-
+  formatter?: (v: number) => string;
   decimals?: number;
-
   glow?: boolean;
-
   pulse?: boolean;
-
   prefix?: string;
-
   suffix?: string;
 }
 
-function easeOutExpo(
-  x: number,
-) {
-
-  return x === 1
-    ? 1
-    : 1 -
-        Math.pow(
-          2,
-          -10 * x,
-        );
+function easeOutExpo(x: number) {
+  return x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
 }
 
 export function AnimatedCounter({
   value,
-
-  duration = 1400,
-
+  duration = 1200,
   formatter,
-
   decimals = 0,
-
   glow = true,
-
   pulse = true,
-
   prefix = "",
-
   suffix = "",
 }: Props) {
 
-  const [
-    display,
-    setDisplay,
-  ] = useState(value);
+  const [display, setDisplay] =
+    useState(value);
 
-  const [
-    isAnimating,
-    setIsAnimating,
-  ] = useState(false);
+  const [isAnimating, setIsAnimating] =
+    useState(false);
 
-  const prevRef =
-    useRef(value);
+  const [prefersReduced, setPrefersReduced] =
+    useState(false);
 
-  const rafRef =
-    useRef<number | null>(
-      null,
-    );
+  const prevRef = useRef(value);
+  const rafRef = useRef<number | null>(null);
+  const startTsRef = useRef<number | null>(null);
 
-  const startTsRef =
-    useRef<number | null>(
-      null,
-    );
+  /* CHECK MOTION PREFERENCES */
+  useEffect(() => {
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // ANIMATION
-  // ───────────────────────────────────────────────────────────────────────────
+    setPrefersReduced(prefersReducedMotion);
+  }, []);
 
+  /* ANIMATION */
   useEffect(() => {
 
-    const from =
-      prevRef.current;
-
+    const from = prevRef.current;
     const to = value;
 
-    if (
-      from === to
-    ) {
+    if (from === to) {
       return;
     }
 
-    setIsAnimating(
-      true,
-    );
-
-    if (
-      rafRef.current
-    ) {
-
-      cancelAnimationFrame(
-        rafRef.current,
-      );
+    /* INSTANT UPDATE IF MOTION REDUCED */
+    if (prefersReduced) {
+      setDisplay(to);
+      prevRef.current = to;
+      return;
     }
 
-    startTsRef.current =
-      null;
+    setIsAnimating(true);
 
-    const step = (
-      ts: number,
-    ) => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
 
-      if (
-        !startTsRef.current
-      ) {
+    startTsRef.current = null;
 
-        startTsRef.current =
-          ts;
+    const step = (ts: number) => {
+
+      if (!startTsRef.current) {
+        startTsRef.current = ts;
       }
 
       const elapsed =
-        ts -
-        startTsRef.current;
+        ts - startTsRef.current;
 
       const progress =
-        Math.min(
-          elapsed /
-            duration,
-          1,
-        );
+        Math.min(elapsed / duration, 1);
 
-      const eased =
-        easeOutExpo(
-          progress,
-        );
+      const eased = easeOutExpo(progress);
 
       const current =
-        from +
-        (to - from) *
-          eased;
+        from + (to - from) * eased;
 
-      const rounded =
-        Number(
-          current.toFixed(
-            decimals,
-          ),
-        );
-
-      setDisplay(
-        rounded,
+      const rounded = Number(
+        current.toFixed(decimals),
       );
 
-      if (
-        progress < 1
-      ) {
+      setDisplay(rounded);
+
+      if (progress < 1) {
 
         rafRef.current =
-          requestAnimationFrame(
-            step,
-          );
+          requestAnimationFrame(step);
 
       } else {
 
         setDisplay(to);
-
-        prevRef.current =
-          to;
-
-        setIsAnimating(
-          false,
-        );
+        prevRef.current = to;
+        setIsAnimating(false);
       }
     };
 
     rafRef.current =
-      requestAnimationFrame(
-        step,
-      );
+      requestAnimationFrame(step);
 
     return () => {
 
-      if (
-        rafRef.current
-      ) {
-
-        cancelAnimationFrame(
-          rafRef.current,
-        );
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
       }
     };
 
@@ -200,33 +131,19 @@ export function AnimatedCounter({
     value,
     duration,
     decimals,
+    prefersReduced,
   ]);
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // FORMAT
-  // ───────────────────────────────────────────────────────────────────────────
+  /* FORMAT */
+  const formatted = formatter
+    ? formatter(display)
+    : display.toLocaleString("en-IN", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      });
 
-  const formatted =
-    formatter
-      ? formatter(
-          display,
-        )
-      : display.toLocaleString(
-          "en-IN",
-          {
-            minimumFractionDigits:
-              decimals,
-            maximumFractionDigits:
-              decimals,
-          },
-        );
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ───────────────────────────────────────────────────────────────────────────
-
+  /* RENDER */
   return (
-
     <span
       className={`
         relative
@@ -234,14 +151,9 @@ export function AnimatedCounter({
         items-center
         transition-all
         duration-500
+        ${glow ? "text-shadow-cyan" : ""}
         ${
-          glow
-            ? "text-shadow-cyan"
-            : ""
-        }
-        ${
-          pulse &&
-          isAnimating
+          pulse && isAnimating && !prefersReduced
             ? "animate-counterPulse"
             : ""
         }
@@ -249,18 +161,16 @@ export function AnimatedCounter({
     >
 
       {/* GLOW LAYER */}
-
-      {glow && (
-
+      {glow && !prefersReduced && (
         <span
           className="
             pointer-events-none
             absolute
             inset-0
-            blur-xl
-            opacity-40
+            blur-lg
+            opacity-30
           "
-          aria-hidden
+          aria-hidden="true"
         >
           {prefix}
           {formatted}
@@ -269,7 +179,6 @@ export function AnimatedCounter({
       )}
 
       {/* MAIN VALUE */}
-
       <span
         className="
           relative
@@ -278,31 +187,26 @@ export function AnimatedCounter({
           tracking-tight
         "
       >
-
         {prefix}
-
         {formatted}
-
         {suffix}
-
       </span>
 
-      {/* LIVE PULSE DOT */}
-
-      {isAnimating && (
-
-        <span
-          className="
-            ml-2
-            inline-block
-            h-2
-            w-2
-            rounded-full
-            bg-grid-cyan
-            animate-ping
-          "
-        />
-      )}
+      {/* PULSE DOT */}
+      {isAnimating &&
+        !prefersReduced && (
+          <span
+            className="
+              ml-2
+              inline-block
+              h-1.5
+              w-1.5
+              rounded-full
+              bg-grid-gold
+              animate-pulse
+            "
+          />
+        )}
 
     </span>
   );

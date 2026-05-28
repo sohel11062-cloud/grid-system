@@ -1,10 +1,10 @@
 "use client";
 
-const isMobile =
-  typeof window !== "undefined" &&
-  window.innerWidth < 768;
-
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import * as THREE from "three";
 
 export function HologramScene() {
@@ -15,29 +15,35 @@ export function HologramScene() {
   const rafRef =
     useRef<number>(0);
 
+  const [isMounted, setIsMounted] =
+    useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   useEffect(() => {
 
+    if (!isMounted) return;
+
     if (
-      typeof window ===
-      "undefined"
+      typeof window === "undefined"
     ) {
       return;
     }
 
-    // PERFORMANCE SAFE GUARDS
+    /* DEVICE DETECTION - EARLY RETURN */
+    const isSmallViewport =
+      window.innerWidth < 1024;
 
-    if (
+    const prefersReduced =
       window.matchMedia(
         "(prefers-reduced-motion: reduce)",
-      ).matches
-    ) {
-      return;
-    }
-
-    // DISABLE ON SMALL DEVICES
+      ).matches;
 
     if (
-      window.innerWidth < 768
+      isSmallViewport ||
+      prefersReduced
     ) {
       return;
     }
@@ -49,10 +55,7 @@ export function HologramScene() {
       return;
     }
 
-    // ───────────────────────────────────────────────────────────────────────
-    // RENDERER
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* RENDERER - OPTIMIZED SETTINGS */
     const renderer =
       new THREE.WebGLRenderer({
         canvas,
@@ -60,8 +63,10 @@ export function HologramScene() {
         antialias: true,
         powerPreference:
           "high-performance",
+        precision: "mediump",
       });
 
+    /* PIXEL RATIO - CAPPED */
     renderer.setPixelRatio(
       Math.min(
         window.devicePixelRatio,
@@ -81,25 +86,19 @@ export function HologramScene() {
       THREE.ACESFilmicToneMapping;
 
     renderer.toneMappingExposure =
-      1.1;
+      1.0;
 
-    // ───────────────────────────────────────────────────────────────────────
-    // SCENE
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* SCENE */
     const scene =
       new THREE.Scene();
 
     scene.fog =
       new THREE.FogExp2(
-        0x02030a,
+        0x0f0f0f,
         0.028,
       );
 
-    // ───────────────────────────────────────────────────────────────────────
-    // CAMERA
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* CAMERA */
     const camera =
       new THREE.PerspectiveCamera(
         55,
@@ -115,69 +114,47 @@ export function HologramScene() {
       11,
     );
 
-    // ───────────────────────────────────────────────────────────────────────
-    // LIGHTING
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* LIGHTING - REDUCED */
     const cyanLight =
       new THREE.PointLight(
-        0x4df7ff,
-        3,
-        45,
-      );
-
-    cyanLight.position.set(
-      0,
-      0,
-      0,
-    );
-
-    const violetLight =
-      new THREE.PointLight(
-        0xa78bfa,
-        2.4,
+        0x5a7a6f,
+        2.0,
         40,
       );
 
-    violetLight.position.set(
-      6,
-      3,
-      5,
-    );
+    cyanLight.position.set(0, 0, 0);
 
-    const magentaLight =
+    const violetLight =
       new THREE.PointLight(
-        0xe879f9,
-        2,
+        0x7f6b8f,
+        1.4,
         35,
       );
 
-    magentaLight.position.set(
+    violetLight.position.set(6, 3, 5);
+
+    const amberLight =
+      new THREE.PointLight(
+        0xc9a961,
+        1.2,
+        30,
+      );
+
+    amberLight.position.set(
       -6,
       -2,
       5,
     );
 
-    scene.add(
-      cyanLight,
-    );
+    scene.add(cyanLight);
+    scene.add(violetLight);
+    scene.add(amberLight);
 
-    scene.add(
-      violetLight,
-    );
-
-    scene.add(
-      magentaLight,
-    );
-
-    // ───────────────────────────────────────────────────────────────────────
-    // STARFIELD
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* STARFIELD */
     const starGeo =
       new THREE.BufferGeometry();
 
-    const starCount = 9000;
+    const starCount = 4000; /* REDUCED */
 
     const starPos =
       new Float32Array(
@@ -207,183 +184,153 @@ export function HologramScene() {
       new THREE.Points(
         starGeo,
         new THREE.PointsMaterial({
-          color: 0x8cfbff,
-          size: 0.12,
+          color: 0x5a7a6f,
+          size: 0.10,
           transparent: true,
-          opacity: 0.5,
+          opacity: 0.4,
         }),
       );
 
     scene.add(stars);
 
-    // ───────────────────────────────────────────────────────────────────────
-    // CORE GROUP
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* CORE GROUP */
     const coreGroup =
       new THREE.Group();
 
-    // MAIN WIREFRAME CORE
-
+    /* WIREFRAME CORE */
     const core =
       new THREE.Mesh(
         new THREE.IcosahedronGeometry(
-          1.7,
+          1.5,
           1,
         ),
         new THREE.MeshBasicMaterial({
-          color: 0x4df7ff,
+          color: 0x5a7a6f,
           wireframe: true,
           transparent: true,
-          opacity: 0.35,
+          opacity: 0.25,
         }),
       );
 
     coreGroup.add(core);
 
-    // INNER ENERGY SPHERE
-
+    /* INNER GLOW */
     const innerGlow =
       new THREE.Mesh(
         new THREE.SphereGeometry(
-          0.95,
-          32,
-          32,
+          0.90,
+          24,
+          24,
         ),
         new THREE.MeshBasicMaterial({
           color: 0x3b82f6,
           transparent: true,
-          opacity: 0.12,
+          opacity: 0.08,
         }),
       );
 
-    coreGroup.add(
-      innerGlow,
-    );
+    coreGroup.add(innerGlow);
 
-    // OUTER ENERGY SHELL
-
+    /* OUTER SHELL */
     const shell =
       new THREE.Mesh(
         new THREE.SphereGeometry(
-          2.5,
-          32,
-          32,
+          2.2,
+          24,
+          24,
         ),
         new THREE.MeshBasicMaterial({
-          color: 0x4df7ff,
+          color: 0x5a7a6f,
           wireframe: true,
           transparent: true,
-          opacity: 0.05,
+          opacity: 0.04,
         }),
       );
 
     coreGroup.add(shell);
 
-    // EXTRA CORE RING
-
+    /* HALO RING */
     const halo =
       new THREE.Mesh(
         new THREE.TorusGeometry(
-          3.2,
-          0.03,
-          16,
-          220,
+          3.0,
+          0.025,
+          12,
+          180,
         ),
         new THREE.MeshBasicMaterial({
-          color: 0xa78bfa,
+          color: 0x7f6b8f,
           transparent: true,
-          opacity: 0.2,
+          opacity: 0.15,
         }),
       );
 
-    halo.rotation.x =
-      Math.PI / 2;
+    halo.rotation.x = Math.PI / 2;
 
     coreGroup.add(halo);
 
     scene.add(coreGroup);
 
-    // ───────────────────────────────────────────────────────────────────────
-    // ORBITAL RINGS
-    // ───────────────────────────────────────────────────────────────────────
-
-    const rings:
-      THREE.Mesh[] = [];
+    /* ORBITAL RINGS - REDUCED */
+    const rings: THREE.Mesh[] = [];
 
     [
-      0x4df7ff,
-      0xa78bfa,
-      0xe879f9,
+      0x5a7a6f,
+      0x7f6b8f,
+      0xc9a961,
       0x3b82f6,
-    ].forEach(
-      (color, i) => {
+    ].forEach((color, i) => {
 
-        const ring =
-          new THREE.Mesh(
-            new THREE.TorusGeometry(
-              3 +
-                i * 0.8,
-              0.02,
-              8,
-              220,
-            ),
-            new THREE.MeshBasicMaterial({
-              color,
-              transparent: true,
-              opacity:
-                0.22 -
-                i * 0.03,
-            }),
-          );
+      const ring =
+        new THREE.Mesh(
+          new THREE.TorusGeometry(
+            2.8 + i * 0.7,
+            0.015,
+            6,
+            160,
+          ),
+          new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity:
+              0.16 - i * 0.03,
+          }),
+        );
 
-        ring.rotation.x =
-          i * 0.55;
+      ring.rotation.x = i * 0.5;
+      ring.rotation.y = i * 0.35;
 
-        ring.rotation.y =
-          i * 0.4;
+      rings.push(ring);
+      scene.add(ring);
+    });
 
-        rings.push(ring);
-
-        scene.add(ring);
-      },
-    );
-
-    // ───────────────────────────────────────────────────────────────────────
-    // ENERGY PARTICLES
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* ENERGY PARTICLES - REDUCED */
     const particleGroup =
       new THREE.Group();
 
-    for (
-      let i = 0;
-      i < 180;
-      i++
-    ) {
+    for (let i = 0; i < 100; i++) {
 
       const particle =
         new THREE.Mesh(
           new THREE.SphereGeometry(
-            Math.random() *
-              0.03 +
-              0.015,
-            6,
-            6,
+            Math.random() * 0.025 +
+              0.01,
+            4,
+            4,
           ),
           new THREE.MeshBasicMaterial({
             color:
               i % 2 === 0
-                ? 0x4df7ff
-                : 0xa78bfa,
+                ? 0x5a7a6f
+                : 0x7f6b8f,
             transparent: true,
-            opacity: 0.8,
+            opacity: 0.6,
           }),
         );
 
       const radius =
-        4 +
-        Math.random() * 6;
+        3.5 +
+        Math.random() * 5;
 
       particle.position.set(
         (Math.random() - 0.5) *
@@ -394,25 +341,18 @@ export function HologramScene() {
           radius,
       );
 
-      particleGroup.add(
-        particle,
-      );
+      particleGroup.add(particle);
     }
 
-    scene.add(
-      particleGroup,
-    );
+    scene.add(particleGroup);
 
-    // ───────────────────────────────────────────────────────────────────────
-    // GRID FLOOR
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* GRID FLOOR */
     const grid =
       new THREE.GridHelper(
-        120,
-        70,
-        0x4df7ff,
-        0x4df7ff,
+        100,
+        60,
+        0x5a7a6f,
+        0x5a7a6f,
       );
 
     const gridMat =
@@ -422,57 +362,44 @@ export function HologramScene() {
     gridMat.transparent =
       true;
 
-    gridMat.opacity = 0.08;
+    gridMat.opacity = 0.05;
 
     grid.position.y = -5;
 
     scene.add(grid);
 
-    // ───────────────────────────────────────────────────────────────────────
-    // SCANNING RINGS
-    // ───────────────────────────────────────────────────────────────────────
+    /* SCANNING RINGS - REDUCED */
+    const scanRings: THREE.Mesh[] = [];
 
-    const scanRings:
-      THREE.Mesh[] = [];
-
-    for (
-      let i = 0;
-      i < 5;
-      i++
-    ) {
+    for (let i = 0; i < 3; i++) {
 
       const ring =
         new THREE.Mesh(
           new THREE.RingGeometry(
-            2.5 + i,
-            2.56 + i,
-            128,
+            2.2 + i,
+            2.26 + i,
+            96,
           ),
           new THREE.MeshBasicMaterial({
-            color: 0x4df7ff,
+            color: 0x5a7a6f,
             side:
               THREE.DoubleSide,
             transparent: true,
-            opacity: 0.04,
+            opacity: 0.02,
           }),
         );
 
-      ring.rotation.x =
-        Math.PI / 2;
+      ring.rotation.x = Math.PI / 2;
 
       ring.position.y =
-        -4.8 +
-        i * 0.08;
+        -4.8 + i * 0.08;
 
       scanRings.push(ring);
 
       scene.add(ring);
     }
 
-    // ───────────────────────────────────────────────────────────────────────
-    // MOUSE PARALLAX
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* MOUSE PARALLAX */
     let mx = 0;
     let my = 0;
 
@@ -496,36 +423,30 @@ export function HologramScene() {
     window.addEventListener(
       "mousemove",
       onMouse,
+      { passive: true },
     );
 
-    // ───────────────────────────────────────────────────────────────────────
-    // RESIZE
-    // ───────────────────────────────────────────────────────────────────────
+    /* RESIZE */
+    const onResize = () => {
 
-    const onResize =
-      () => {
+      camera.aspect =
+        window.innerWidth /
+        window.innerHeight;
 
-        camera.aspect =
-          window.innerWidth /
-          window.innerHeight;
+      camera.updateProjectionMatrix();
 
-        camera.updateProjectionMatrix();
-
-        renderer.setSize(
-          window.innerWidth,
-          window.innerHeight,
-        );
-      };
+      renderer.setSize(
+        window.innerWidth,
+        window.innerHeight,
+      );
+    };
 
     window.addEventListener(
       "resize",
       onResize,
     );
 
-    // ───────────────────────────────────────────────────────────────────────
-    // ANIMATION LOOP
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* ANIMATION LOOP */
     let t = 0;
 
     const animate = () => {
@@ -535,61 +456,53 @@ export function HologramScene() {
           animate,
         );
 
-      t += 0.0035;
+      t += 0.003; /* SLIGHTLY FASTER */
 
-      // CORE ROTATION
-
+      /* CORE ROTATION */
       core.rotation.x +=
-        0.002;
-
-      core.rotation.y +=
-        0.003;
-
-      shell.rotation.y -=
         0.0015;
 
+      core.rotation.y +=
+        0.0025;
+
+      shell.rotation.y -=
+        0.0012;
+
       halo.rotation.z +=
-        0.0018;
+        0.0015;
 
-      // ORBITAL RINGS
+      /* ORBITAL RINGS */
+      rings.forEach((ring, i) => {
 
-      rings.forEach(
-        (ring, i) => {
+        ring.rotation.z +=
+          0.0008 +
+          i * 0.0006;
 
-          ring.rotation.z +=
-            0.001 +
-            i * 0.0008;
+        ring.rotation.x +=
+          0.0004;
+      });
 
-          ring.rotation.x +=
-            0.0005;
-        },
-      );
-
-      // PARTICLES
-
+      /* PARTICLES */
       particleGroup.rotation.y +=
-        0.0008;
+        0.0006;
 
       particleGroup.rotation.x +=
-        0.0003;
+        0.0002;
 
       particleGroup.children.forEach(
         (p, i) => {
 
           p.position.y +=
-            Math.sin(
-              t + i,
-            ) * 0.0015;
+            Math.sin(t + i) *
+            0.0012;
         },
       );
 
-      // STARFIELD
-
+      /* STARFIELD */
       stars.rotation.y +=
-        0.00012;
+        0.00010;
 
-      // SCAN RINGS
-
+      /* SCAN RINGS */
       scanRings.forEach(
         (ring, i) => {
 
@@ -598,65 +511,48 @@ export function HologramScene() {
               THREE.MeshBasicMaterial;
 
           mat.opacity =
-            0.02 +
-            Math.sin(
-              t * 2 +
-                i,
-            ) *
-              0.02;
+            0.01 +
+            Math.sin(t * 2 + i) *
+              0.015;
 
           ring.scale.x =
             1 +
-            Math.sin(
-              t + i,
-            ) *
-              0.008;
+            Math.sin(t + i) *
+              0.006;
 
           ring.scale.y =
             1 +
-            Math.sin(
-              t + i,
-            ) *
-              0.008;
+            Math.sin(t + i) *
+              0.006;
         },
       );
 
-      // CORE FLOAT
-
+      /* CORE FLOAT */
       coreGroup.position.y =
-        Math.sin(t * 1.8) *
-        0.18;
+        Math.sin(t * 1.6) *
+        0.14;
 
-      // LIGHT PULSE
-
+      /* LIGHT PULSE */
       cyanLight.intensity =
-        2.8 +
-        Math.sin(t * 3) *
-          0.5;
+        1.8 +
+        Math.sin(t * 3) * 0.4;
 
       violetLight.intensity =
-        2 +
-        Math.sin(t * 2) *
-          0.3;
+        1.2 +
+        Math.sin(t * 2) * 0.25;
 
-      // CAMERA PARALLAX
-
+      /* CAMERA PARALLAX */
       camera.position.x +=
-        (mx * 2.5 -
+        (mx * 2.0 -
           camera.position.x) *
-        0.03;
+        0.025;
 
       camera.position.y +=
-        (-my * 1.5 +
-          1.5 -
+        (-my * 1.2 + 1.5 -
           camera.position.y) *
-        0.03;
+        0.025;
 
-      camera.lookAt(
-        0,
-        0,
-        0,
-      );
+      camera.lookAt(0, 0, 0);
 
       renderer.render(
         scene,
@@ -666,10 +562,7 @@ export function HologramScene() {
 
     animate();
 
-    // ───────────────────────────────────────────────────────────────────────
-    // CLEANUP
-    // ───────────────────────────────────────────────────────────────────────
-
+    /* CLEANUP */
     return () => {
 
       cancelAnimationFrame(
@@ -686,101 +579,53 @@ export function HologramScene() {
         onResize,
       );
 
-      renderer.dispose();
-
+      /* PROPER CLEANUP */
       starGeo.dispose();
+      core.geometry.dispose();
+      (core.material as THREE.Material).dispose();
+      innerGlow.geometry.dispose();
+      (innerGlow.material as THREE.Material).dispose();
+      shell.geometry.dispose();
+      (shell.material as THREE.Material).dispose();
+      halo.geometry.dispose();
+      (halo.material as THREE.Material).dispose();
+
+      rings.forEach((ring) => {
+        ring.geometry.dispose();
+        (ring.material as THREE.Material).dispose();
+      });
+
+      particleGroup.children.forEach((particle) => {
+        const mesh = particle as THREE.Mesh;
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+      });
+
+      gridMat.dispose();
+
+      scanRings.forEach((ring) => {
+        ring.geometry.dispose();
+        (ring.material as THREE.Material).dispose();
+      });
+
+      renderer.dispose();
     };
 
-  }, []);
+  }, [isMounted]);
 
-  if (isMobile) {
-  return null;
-}
-
-return (
-  <>
-
-      {/* THREE CANVAS */}
-
-      <canvas
-        ref={canvasRef}
-        className="
-          pointer-events-none
-          fixed
-          inset-0
-          z-0
-          h-full
-          w-full
-          opacity-[0.45]
-        "
-        aria-hidden
-      />
-
-      {/* CINEMATIC GRADIENTS */}
-
-      <div
-        className="
-          pointer-events-none
-          fixed
-          inset-0
-          z-0
-        "
-        aria-hidden
-        style={{
-          background:
-            `
-            radial-gradient(circle at 20% 30%, rgba(77,247,255,0.05), transparent 30%),
-            radial-gradient(circle at 80% 20%, rgba(167,139,250,0.05), transparent 30%),
-            radial-gradient(circle at 50% 80%, rgba(232,121,249,0.10), transparent 35%),
-            radial-gradient(circle at center, rgba(59,130,246,0.08), transparent 45%),
-            linear-gradient(180deg, #02030a 0%, #050816 100%)
-            `,
-        }}
-      />
-
-      {/* CYBER GRID */}
-
-      <div
-        className="
-          pointer-events-none
-          fixed
-          inset-0
-          z-0
-          opacity-[0.015]
-        "
-        aria-hidden
-        style={{
-          backgroundImage:
-            `
-            linear-gradient(rgba(77,247,255,0.25) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(77,247,255,0.25) 1px, transparent 1px)
-            `,
-          backgroundSize:
-            "120px 120px",
-        }}
-      />
-
-      {/* VIGNETTE */}
-
-      <div
-        className="
-          pointer-events-none
-          fixed
-          inset-0
-          z-0
-        "
-        style={{
-          background:
-            `
-            radial-gradient(
-              circle at center,
-              transparent 40%,
-              rgba(0,0,0,0.22) 100%
-            )
-            `,
-        }}
-      />
-
-    </>
+  return (
+    <canvas
+      ref={canvasRef}
+      className="
+        pointer-events-none
+        fixed
+        inset-0
+        z-[-1]
+        h-full
+        w-full
+        opacity-40
+      "
+      aria-hidden="true"
+    />
   );
 }
